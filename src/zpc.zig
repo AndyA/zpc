@@ -250,47 +250,6 @@ pub fn ZpcParserForTag(
     return ZpcParser(Context, ZpcResult(ZpcToken(Tag, phase)));
 }
 
-const TestTag = enum(u8) {
-    // Don't call it NOP so we don't use it by mistake.
-    NOT_NOP,
-    HELLO,
-    FOO,
-    BAR,
-    NEWLINE,
-    DIGIT,
-    ALPHA,
-    MULTI,
-    IDENT,
-    PLUS,
-    MINUS,
-    OPEN,
-    CLOSE,
-    SEQ,
-    NEST,
-    TERM,
-    MANY,
-    ALNUM,
-    ARRAY,
-    REST,
-};
-
-const TestToken = ZpcToken(TestTag, .run);
-const TestResult = ZpcResult(TestToken);
-
-const TestContext = struct {
-    allocator: Allocator,
-    expr: *const ZpcParser(@This(), TestResult) = undefined,
-};
-
-fn checkAndConsume(
-    ctx: TestContext,
-    expected: TestResult,
-    actual: TestResult,
-) !void {
-    defer actual.deinit(ctx.allocator);
-    try expectEqualDeep(expected, actual);
-}
-
 pub const Predicate = fn (char: u8) bool;
 
 pub fn predAny() Predicate {
@@ -400,30 +359,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return keyword(Token.NOP, str);
         }
 
-        test keyword {
-            const parseHello = keyword(.HELLO, "Hello");
-
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.HELLO, "Hello"), ", World"),
-                try parseHello(ctx, "Hello, World"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("H"),
-                try parseHello(ctx, "H"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("Hell or bust"),
-                try parseHello(ctx, "Hell or bust"),
-            );
-        }
-
         pub fn always(tag: Tag, frag: []const u8) Parser {
             const shim = struct {
                 fn alwaysParser(_: Context, input: []const u8) ZpcError!Result {
@@ -431,17 +366,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.alwaysParser;
-        }
-
-        test always {
-            const parseAlways = always(.FOO, "foo");
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.FOO, "foo"), "Hello, World"),
-                try parseAlways(ctx, "Hello, World"),
-            );
         }
 
         pub fn eof() Parser {
@@ -455,23 +379,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.eofParser;
         }
 
-        test eof {
-            const parseEof = eof();
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.nothing, ""),
-                try parseEof(ctx, ""),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("X"),
-                try parseEof(ctx, "X"),
-            );
-        }
-
         pub fn rest() Parser {
             const shim = struct {
                 fn restParser(_: Context, input: []const u8) ZpcError!Result {
@@ -479,23 +386,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.restParser;
-        }
-
-        test rest {
-            const parseAllDigits = seq(.MULTI, &.{
-                takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-                rest(),
-            });
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-            try checkAndConsume(
-                ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initSlice(Token.NOP, "ABC."),
-                }), ""),
-
-                try parseAllDigits(ctx, "123ABC."),
-            );
         }
 
         pub fn takeWhile(tag: Tag, bounds: Quantifier, pred: Predicate) Parser {
@@ -512,39 +402,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.takeWhileParser;
-        }
-
-        test takeWhile {
-            const parseDigits = takeWhile(
-                .DIGIT,
-                .range(1, 2),
-                std.ascii.isDigit,
-            );
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.DIGIT, "67"), "b"),
-                try parseDigits(ctx, "67b"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.DIGIT, "67"), ""),
-                try parseDigits(ctx, "67"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.DIGIT, "67"), "8"),
-                try parseDigits(ctx, "678"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("X"),
-                try parseDigits(ctx, "X"),
-            );
         }
 
         pub fn alt(parsers: []const *const Parser) Parser {
@@ -566,35 +423,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.altParser;
-        }
-
-        test alt {
-            const parseAlt = alt(&.{
-                keyword(.HELLO, "Hello"),
-                keyword(.FOO, "Foo"),
-            });
-
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.HELLO, "Hello"), ", World"),
-                try parseAlt(ctx, "Hello, World"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "Bar"),
-                try parseAlt(ctx, "FooBar"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("Hell or bust"),
-                try parseAlt(ctx, "Hell or bust"),
-            );
-
-            // TODO check hwm
         }
 
         pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
@@ -619,26 +447,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.seqParser;
         }
 
-        test seq {
-            const parseAlphaNum = seq(.MULTI, &.{
-                takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-                takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
-            });
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initSlice(.ALPHA, "ABC"),
-                }), "."),
-
-                try parseAlphaNum(ctx, "123ABC."),
-            );
-
-            // TODO fail
-        }
-
         pub fn left(lp: Parser, rp: Parser) Parser {
             const shim = struct {
                 fn leftParser(ctx: Context, input: []const u8) ZpcError!Result {
@@ -657,33 +465,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.leftParser;
         }
 
-        test left {
-            const parseLeft = left(
-                keyword(.FOO, "Foo"),
-                keyword(.BAR, "Bar"),
-            );
-
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "Baz"),
-                try parseLeft(ctx, "FooBarBaz"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFail("Baz", "FooBaz"),
-                try parseLeft(ctx, "FooBaz"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("BarFoo"),
-                try parseLeft(ctx, "BarFoo"),
-            );
-        }
-
         pub fn right(lp: Parser, rp: Parser) Parser {
             const shim = struct {
                 fn rightParser(ctx: Context, input: []const u8) ZpcError!Result {
@@ -698,62 +479,8 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.rightParser;
         }
 
-        test right {
-            const parseRight = right(
-                keyword(.FOO, "Foo"),
-                keyword(.BAR, "Bar"),
-            );
-
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.BAR, "Bar"), "Baz"),
-                try parseRight(ctx, "FooBarBaz"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFail("Baz", "FooBaz"),
-                try parseRight(ctx, "FooBaz"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("BarFoo"),
-                try parseRight(ctx, "BarFoo"),
-            );
-        }
-
         pub fn between(lp: Parser, parser: Parser, rp: Parser) Parser {
             return left(right(lp, parser), rp);
-        }
-
-        test between {
-            const parseBetween = between(
-                literal("("),
-                takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-                literal(")"),
-            );
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.DIGIT, "123"), "."),
-                try parseBetween(ctx, "(123)."),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFail("", "(123"),
-                try parseBetween(ctx, "(123"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFail("", "("),
-                try parseBetween(ctx, "("),
-            );
         }
 
         pub fn many(tag: Tag, bounds: Quantifier, parser: Parser) Parser {
@@ -780,42 +507,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.manyParser;
         }
 
-        test many {
-            const parseFooBar = many(
-                .MULTI,
-                .range(2, 3),
-                alt(&.{ keyword(.FOO, "Foo"), keyword(.BAR, "Bar") }),
-            );
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.BAR, "Bar"),
-                }), "Baz"),
-                try parseFooBar(ctx, "FooFooBarBaz"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.BAR, "Bar"),
-                }), "BarBaz"),
-                try parseFooBar(ctx, "FooFooBarBarBaz"),
-            );
-
-            // We need two or more so a single Foo shouldn't be consumed.
-            try checkAndConsume(
-                ctx,
-                .initFail(".", "Foo."),
-                try parseFooBar(ctx, "Foo."),
-            );
-        }
-
         pub fn optional(parser: Parser) Parser {
             const shim = struct {
                 fn optionalParser(ctx: Context, input: []const u8) ZpcError!Result {
@@ -825,27 +516,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.optionalParser;
-        }
-
-        test optional {
-            const parseMaybeNumber = optional(takeWhile(
-                .DIGIT,
-                .oneOrMore,
-                std.ascii.isDigit,
-            ));
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.DIGIT, "123"), "Foo"),
-                try parseMaybeNumber(ctx, "123Foo"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.nothing, "Foo"),
-                try parseMaybeNumber(ctx, "Foo"),
-            );
         }
 
         pub fn discard(parser: Parser) Parser {
@@ -863,24 +533,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.discardParser;
         }
 
-        test discard {
-            const parseHello = discard(keyword(.HELLO, "Hello"));
-
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.nothing, ", World"),
-                try parseHello(ctx, "Hello, World"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("H"),
-                try parseHello(ctx, "H"),
-            );
-        }
-
         pub fn span(tag: Tag, parser: Parser) Parser {
             const shim = struct {
                 fn matchParser(ctx: Context, input: []const u8) ZpcError!Result {
@@ -895,19 +547,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.matchParser;
-        }
-
-        test span {
-            const parseAlphaNum = span(.ALNUM, seq(.MULTI, &.{
-                takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-                takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
-            }));
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.ALNUM, "100abc"), "."),
-                try parseAlphaNum(ctx, "100abc."),
-            );
         }
 
         pub fn flat(parser: Parser) Parser {
@@ -929,40 +568,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.flatParser;
         }
 
-        test flat {
-            const parseDigits = takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
-            const parseFlat = seq(.ARRAY, &.{
-                parseDigits,
-                flat(many(
-                    Token.NOP,
-                    .zeroOrMore,
-                    right(literal(","), parseDigits),
-                )),
-            });
-
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            const expr = "1,2,3;";
-            const want: Result = .initOk(.initList(.ARRAY, &.{
-                .initSlice(.DIGIT, "1"),
-                .initSlice(.DIGIT, "2"),
-                .initSlice(.DIGIT, "3"),
-            }), ";");
-
-            if (false) {
-                const res = try parseFlat(ctx, expr);
-                defer res.deinit(std.testing.allocator);
-                print("want: {f}\n", .{want});
-                print("res:  {f}\n", .{res});
-            }
-
-            try checkAndConsume(
-                ctx,
-                want,
-                try parseFlat(ctx, expr),
-            );
-        }
-
         pub fn advances(parser: Parser) Parser {
             const shim = struct {
                 fn advancesParser(ctx: Context, input: []const u8) ZpcError!Result {
@@ -975,24 +580,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.advancesParser;
-        }
-
-        test advances {
-            const parseDigits = takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
-            const parseAdvances = advances(parseDigits);
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.DIGIT, ""), "."),
-                try parseDigits(ctx, "."),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initFailHere("."),
-                try parseAdvances(ctx, "."),
-            );
         }
 
         // If we receive a single element list lower it to the first item
@@ -1015,34 +602,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 }
             };
             return shim.lowerParser;
-        }
-
-        test lower {
-            const parseLower = lower(many(.MULTI, .oneOrMore, keyword(.FOO, "Foo")));
-            const parseFlatLower = flat(parseLower);
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
-                }), "."),
-                try parseLower(ctx, "FooFooFoo."),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "."),
-                try parseLower(ctx, "Foo."),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "."),
-                try parseFlatLower(ctx, "Foo."),
-            );
         }
 
         pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
@@ -1069,35 +628,6 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.refineParser;
         }
 
-        test refine {
-            const parseKeyword = refine(
-                takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
-                alt(&.{
-                    keyword(.FOO, "Foo"),
-                    keyword(.BAR, "Bar"),
-                }),
-            );
-            const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.FOO, "Foo"), " Hello"),
-                try parseKeyword(ctx, "Foo Hello"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.BAR, "Bar"), " Hello"),
-                try parseKeyword(ctx, "Bar Hello"),
-            );
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initSlice(.IDENT, "FooBar"), " Hello"),
-                try parseKeyword(ctx, "FooBar Hello"),
-            );
-        }
-
         // Call a parser that is pointed to by a field on the context.
         pub fn recurse(field_name: []const u8) Parser {
             const shim = struct {
@@ -1108,78 +638,563 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             };
             return shim.recurseParser;
         }
-
-        test recurse {
-            const parseDigits = takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
-            const skipSpace = takeWhile(Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
-
-            const parseAtom = right(skipSpace, alt(&.{
-                between(literal("("), recurse("expr"), literal(")")),
-                parseDigits,
-            }));
-
-            const parseTerm =
-                seq(.TERM, &.{
-                    parseAtom,
-                    many(.MANY, .zeroOrMore, seq(.SEQ, &.{
-                        right(skipSpace, alt(&.{ keyword(.PLUS, "+"), keyword(.MINUS, "-") })),
-                        parseAtom,
-                    })),
-                });
-
-            const parseExpr = parseTerm;
-
-            const ctx: TestContext = .{
-                .allocator = std.testing.allocator,
-                .expr = parseExpr,
-            };
-
-            try checkAndConsume(
-                ctx,
-                .initOk(.initList(.TERM, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initList(.MANY, &.{}),
-                }), ";"),
-                try parseExpr(ctx, "123;"),
-            );
-
-            const expr = "(123 + 7) - 2 + 700;";
-            const want: Result = .initOk(.initList(.TERM, &.{
-                .initList(.TERM, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initList(.MANY, &.{
-                        .initList(.SEQ, &.{
-                            .initSlice(.PLUS, "+"),
-                            .initSlice(.DIGIT, "7"),
-                        }),
-                    }),
-                }),
-                .initList(.MANY, &.{
-                    .initList(.SEQ, &.{
-                        .initSlice(.MINUS, "-"),
-                        .initSlice(.DIGIT, "2"),
-                    }),
-                    .initList(.SEQ, &.{
-                        .initSlice(.PLUS, "+"),
-                        .initSlice(.DIGIT, "700"),
-                    }),
-                }),
-            }), ";");
-
-            if (false) {
-                const res = try parseExpr(ctx, expr);
-                defer res.deinit(std.testing.allocator);
-                print("want: {f}\n", .{want});
-                print("res:  {f}\n", .{res});
-            }
-
-            try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
-        }
     };
 }
 
-test Zpc {
-    _ = Zpc(TestContext, TestTag);
+const TestTag = enum(u8) {
+    // Don't call it NOP so we don't use it by mistake.
+    NOT_NOP,
+    HELLO,
+    FOO,
+    BAR,
+    NEWLINE,
+    DIGIT,
+    ALPHA,
+    MULTI,
+    IDENT,
+    PLUS,
+    MINUS,
+    OPEN,
+    CLOSE,
+    SEQ,
+    NEST,
+    TERM,
+    MANY,
+    ALNUM,
+    ARRAY,
+    REST,
+};
+
+const TestToken = ZpcToken(TestTag, .run);
+const TestResult = ZpcResult(TestToken);
+
+const TestContext = struct {
+    allocator: Allocator,
+    expr: *const ZpcParser(@This(), TestResult) = undefined,
+};
+
+fn checkAndConsume(
+    ctx: TestContext,
+    expected: TestResult,
+    actual: TestResult,
+) !void {
+    defer actual.deinit(ctx.allocator);
+    try expectEqualDeep(expected, actual);
+}
+
+test "always" {
+    const P = Zpc(TestContext, TestTag);
+    const parseAlways = P.always(.FOO, "foo");
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.FOO, "foo"), "Hello, World"),
+        try parseAlways(ctx, "Hello, World"),
+    );
+}
+
+test "eof" {
+    const P = Zpc(TestContext, TestTag);
+    const parseEof = P.eof();
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.nothing, ""),
+        try parseEof(ctx, ""),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("X"),
+        try parseEof(ctx, "X"),
+    );
+}
+
+test "rest" {
+    const P = Zpc(TestContext, TestTag);
+    const parseAllDigits = P.seq(.MULTI, &.{
+        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        P.rest(),
+    });
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+    try checkAndConsume(
+        ctx,
+        .initOk(.initList(.MULTI, &.{
+            .initSlice(.DIGIT, "123"),
+            .initSlice(P.Token.NOP, "ABC."),
+        }), ""),
+
+        try parseAllDigits(ctx, "123ABC."),
+    );
+}
+
+test "keyword" {
+    const P = Zpc(TestContext, TestTag);
+    const parseHello = P.keyword(.HELLO, "Hello");
+
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.HELLO, "Hello"), ", World"),
+        try parseHello(ctx, "Hello, World"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("H"),
+        try parseHello(ctx, "H"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("Hell or bust"),
+        try parseHello(ctx, "Hell or bust"),
+    );
+}
+
+test "takeWhile" {
+    const P = Zpc(TestContext, TestTag);
+    const parseDigits = P.takeWhile(
+        .DIGIT,
+        .range(1, 2),
+        std.ascii.isDigit,
+    );
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.DIGIT, "67"), "b"),
+        try parseDigits(ctx, "67b"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.DIGIT, "67"), ""),
+        try parseDigits(ctx, "67"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.DIGIT, "67"), "8"),
+        try parseDigits(ctx, "678"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("X"),
+        try parseDigits(ctx, "X"),
+    );
+}
+
+test "alt" {
+    const P = Zpc(TestContext, TestTag);
+    const parseAlt = P.alt(&.{
+        P.keyword(.HELLO, "Hello"),
+        P.keyword(.FOO, "Foo"),
+    });
+
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.HELLO, "Hello"), ", World"),
+        try parseAlt(ctx, "Hello, World"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.FOO, "Foo"), "Bar"),
+        try parseAlt(ctx, "FooBar"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("Hell or bust"),
+        try parseAlt(ctx, "Hell or bust"),
+    );
+
+    // TODO check hwm
+}
+
+test "seq" {
+    const P = Zpc(TestContext, TestTag);
+    const parseAlphaNum = P.seq(.MULTI, &.{
+        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+    });
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initList(.MULTI, &.{
+            .initSlice(.DIGIT, "123"),
+            .initSlice(.ALPHA, "ABC"),
+        }), "."),
+
+        try parseAlphaNum(ctx, "123ABC."),
+    );
+
+    // TODO fail
+}
+
+test "left" {
+    const P = Zpc(TestContext, TestTag);
+    const parseLeft = P.left(
+        P.keyword(.FOO, "Foo"),
+        P.keyword(.BAR, "Bar"),
+    );
+
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.FOO, "Foo"), "Baz"),
+        try parseLeft(ctx, "FooBarBaz"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFail("Baz", "FooBaz"),
+        try parseLeft(ctx, "FooBaz"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("BarFoo"),
+        try parseLeft(ctx, "BarFoo"),
+    );
+}
+
+test "right" {
+    const P = Zpc(TestContext, TestTag);
+    const parseRight = P.right(
+        P.keyword(.FOO, "Foo"),
+        P.keyword(.BAR, "Bar"),
+    );
+
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.BAR, "Bar"), "Baz"),
+        try parseRight(ctx, "FooBarBaz"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFail("Baz", "FooBaz"),
+        try parseRight(ctx, "FooBaz"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("BarFoo"),
+        try parseRight(ctx, "BarFoo"),
+    );
+}
+
+test "between" {
+    const P = Zpc(TestContext, TestTag);
+    const parseBetween = P.between(
+        P.literal("("),
+        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        P.literal(")"),
+    );
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.DIGIT, "123"), "."),
+        try parseBetween(ctx, "(123)."),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFail("", "(123"),
+        try parseBetween(ctx, "(123"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFail("", "("),
+        try parseBetween(ctx, "("),
+    );
+}
+
+test "many" {
+    const P = Zpc(TestContext, TestTag);
+    const parseFooBar = P.many(
+        .MULTI,
+        .range(2, 3),
+        P.alt(&.{ P.keyword(.FOO, "Foo"), P.keyword(.BAR, "Bar") }),
+    );
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initList(.MULTI, &.{
+            .initSlice(.FOO, "Foo"),
+            .initSlice(.FOO, "Foo"),
+            .initSlice(.BAR, "Bar"),
+        }), "Baz"),
+        try parseFooBar(ctx, "FooFooBarBaz"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initList(.MULTI, &.{
+            .initSlice(.FOO, "Foo"),
+            .initSlice(.FOO, "Foo"),
+            .initSlice(.BAR, "Bar"),
+        }), "BarBaz"),
+        try parseFooBar(ctx, "FooFooBarBarBaz"),
+    );
+
+    // We need two or more so a single Foo shouldn't be consumed.
+    try checkAndConsume(
+        ctx,
+        .initFail(".", "Foo."),
+        try parseFooBar(ctx, "Foo."),
+    );
+}
+
+test "optional" {
+    const P = Zpc(TestContext, TestTag);
+    const parseMaybeNumber = P.optional(P.takeWhile(
+        .DIGIT,
+        .oneOrMore,
+        std.ascii.isDigit,
+    ));
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.DIGIT, "123"), "Foo"),
+        try parseMaybeNumber(ctx, "123Foo"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.nothing, "Foo"),
+        try parseMaybeNumber(ctx, "Foo"),
+    );
+}
+
+test "discard" {
+    const P = Zpc(TestContext, TestTag);
+    const parseHello = P.discard(P.keyword(.HELLO, "Hello"));
+
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.nothing, ", World"),
+        try parseHello(ctx, "Hello, World"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("H"),
+        try parseHello(ctx, "H"),
+    );
+}
+
+test "span" {
+    const P = Zpc(TestContext, TestTag);
+    const parseAlphaNum = P.span(.ALNUM, P.seq(.MULTI, &.{
+        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+    }));
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.ALNUM, "100abc"), "."),
+        try parseAlphaNum(ctx, "100abc."),
+    );
+}
+
+test "flat" {
+    const P = Zpc(TestContext, TestTag);
+    const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
+    const parseFlat = P.seq(.ARRAY, &.{
+        parseDigits,
+        P.flat(P.many(
+            P.Token.NOP,
+            .zeroOrMore,
+            P.right(P.literal(","), parseDigits),
+        )),
+    });
+
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    const expr = "1,2,3;";
+    const want: P.Result = .initOk(.initList(.ARRAY, &.{
+        .initSlice(.DIGIT, "1"),
+        .initSlice(.DIGIT, "2"),
+        .initSlice(.DIGIT, "3"),
+    }), ";");
+
+    if (false) {
+        const res = try parseFlat(ctx, expr);
+        defer res.deinit(std.testing.allocator);
+        print("want: {f}\n", .{want});
+        print("res:  {f}\n", .{res});
+    }
+
+    try checkAndConsume(
+        ctx,
+        want,
+        try parseFlat(ctx, expr),
+    );
+}
+
+test "advances" {
+    const P = Zpc(TestContext, TestTag);
+    const parseDigits = P.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
+    const parseAdvances = P.advances(parseDigits);
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.DIGIT, ""), "."),
+        try parseDigits(ctx, "."),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initFailHere("."),
+        try parseAdvances(ctx, "."),
+    );
+}
+
+test "lower" {
+    const P = Zpc(TestContext, TestTag);
+    const parseLower = P.lower(P.many(.MULTI, .oneOrMore, P.keyword(.FOO, "Foo")));
+    const parseFlatLower = P.flat(parseLower);
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initList(.MULTI, &.{
+            .initSlice(.FOO, "Foo"),
+            .initSlice(.FOO, "Foo"),
+            .initSlice(.FOO, "Foo"),
+        }), "."),
+        try parseLower(ctx, "FooFooFoo."),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.FOO, "Foo"), "."),
+        try parseLower(ctx, "Foo."),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.FOO, "Foo"), "."),
+        try parseFlatLower(ctx, "Foo."),
+    );
+}
+
+test "refine" {
+    const P = Zpc(TestContext, TestTag);
+    const parseKeyword = P.refine(
+        P.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
+        P.alt(&.{
+            P.keyword(.FOO, "Foo"),
+            P.keyword(.BAR, "Bar"),
+        }),
+    );
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.FOO, "Foo"), " Hello"),
+        try parseKeyword(ctx, "Foo Hello"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.BAR, "Bar"), " Hello"),
+        try parseKeyword(ctx, "Bar Hello"),
+    );
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.IDENT, "FooBar"), " Hello"),
+        try parseKeyword(ctx, "FooBar Hello"),
+    );
+}
+
+test "recurse" {
+    const P = Zpc(TestContext, TestTag);
+    const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
+    const skipSpace = P.takeWhile(P.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
+
+    const parseAtom = P.right(skipSpace, P.alt(&.{
+        P.between(P.literal("("), P.recurse("expr"), P.literal(")")),
+        parseDigits,
+    }));
+
+    const parseTerm =
+        P.seq(.TERM, &.{
+            parseAtom,
+            P.many(.MANY, .zeroOrMore, P.seq(.SEQ, &.{
+                P.right(skipSpace, P.alt(&.{ P.keyword(.PLUS, "+"), P.keyword(.MINUS, "-") })),
+                parseAtom,
+            })),
+        });
+
+    const parseExpr = parseTerm;
+
+    const ctx: TestContext = .{
+        .allocator = std.testing.allocator,
+        .expr = parseExpr,
+    };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initList(.TERM, &.{
+            .initSlice(.DIGIT, "123"),
+            .initList(.MANY, &.{}),
+        }), ";"),
+        try parseExpr(ctx, "123;"),
+    );
+
+    const expr = "(123 + 7) - 2 + 700;";
+    const want: P.Result = .initOk(.initList(.TERM, &.{
+        .initList(.TERM, &.{
+            .initSlice(.DIGIT, "123"),
+            .initList(.MANY, &.{
+                .initList(.SEQ, &.{
+                    .initSlice(.PLUS, "+"),
+                    .initSlice(.DIGIT, "7"),
+                }),
+            }),
+        }),
+        .initList(.MANY, &.{
+            .initList(.SEQ, &.{
+                .initSlice(.MINUS, "-"),
+                .initSlice(.DIGIT, "2"),
+            }),
+            .initList(.SEQ, &.{
+                .initSlice(.PLUS, "+"),
+                .initSlice(.DIGIT, "700"),
+            }),
+        }),
+    }), ";");
+
+    if (false) {
+        const res = try parseExpr(ctx, expr);
+        defer res.deinit(std.testing.allocator);
+        print("want: {f}\n", .{want});
+        print("res:  {f}\n", .{res});
+    }
+
+    try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
 }
 
 // test ZpcComptime {
