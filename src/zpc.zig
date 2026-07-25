@@ -41,7 +41,10 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
 
             pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
                 try self.indent(writer);
-                try writer.print("{s}/{s}", .{ @tagName(self.token.value), @tagName(self.token.tag) });
+                try writer.print(
+                    "{s}/{s}",
+                    .{ @tagName(self.token.value), @tagName(self.token.tag) },
+                );
 
                 switch (self.token.value) {
                     .nothing => {},
@@ -239,7 +242,11 @@ pub fn ZpcParser(comptime Context: type, comptime Result: type) type {
     return fn (ctx: Context, input: []const u8) ZpcError!Result;
 }
 
-pub fn ZpcParserForTag(comptime Context: type, comptime Tag: type, comptime phase: ZpcPhase) type {
+pub fn ZpcParserForTag(
+    comptime Context: type,
+    comptime Tag: type,
+    comptime phase: ZpcPhase,
+) type {
     return ZpcParser(Context, ZpcResult(ZpcToken(Tag, phase)));
 }
 
@@ -1174,3 +1181,14 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 test Zpc {
     _ = Zpc(TestContext, TestTag);
 }
+
+// test ZpcComptime {
+//     const Context = struct {
+//         allocator: Allocator,
+//     };
+
+//     const Tag = enum { NONE };
+
+//     const zpc = Zpc(Context, Tag);
+//     _ = zpc;
+// }
