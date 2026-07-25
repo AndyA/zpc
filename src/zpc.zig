@@ -371,6 +371,8 @@ pub fn predSet(charset: []const u8) Predicate {
 }
 
 pub fn Zpc(comptime Context: type, comptime Tag: type) type {
+    if (!@hasField(Context, "allocator"))
+        @compileError("Context must have an allocator field");
     return make_zpc(Context, Tag, .run);
 }
 
