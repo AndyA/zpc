@@ -8,6 +8,62 @@ const Allocator = std.mem.Allocator;
 
 const ct = @import("comptime.zig");
 
+pub const Predicate = fn (char: u8) bool;
+
+pub fn predAny() Predicate {
+    const shim = struct {
+        fn pred(_: u8) bool {
+            return true;
+        }
+    };
+    return shim.pred;
+}
+
+pub fn predAnd(a: Predicate, b: Predicate) Predicate {
+    const shim = struct {
+        fn pred(char: u8) bool {
+            return a(char) and b(char);
+        }
+    };
+    return shim.pred;
+}
+
+pub fn predOr(a: Predicate, b: Predicate) Predicate {
+    const shim = struct {
+        fn pred(char: u8) bool {
+            return a(char) or b(char);
+        }
+    };
+    return shim.pred;
+}
+
+pub fn predNot(p: Predicate) Predicate {
+    const shim = struct {
+        fn pred(char: u8) bool {
+            return !p(char);
+        }
+    };
+    return shim.pred;
+}
+
+pub fn predEqual(want: u8) Predicate {
+    const shim = struct {
+        fn pred(char: u8) bool {
+            return char == want;
+        }
+    };
+    return shim.pred;
+}
+
+pub fn predSet(charset: []const u8) Predicate {
+    const shim = struct {
+        fn pred(char: u8) bool {
+            return std.mem.containsAtLeastScalar(u8, charset, char, 1);
+        }
+    };
+    return shim.pred;
+}
+
 pub const ZpcError = error{OutOfMemory};
 
 pub const ZpcPhase = enum { comp, run };
@@ -212,6 +268,7 @@ pub fn ZpcResult(comptime Token: type) type {
 
         tok: union(enum) {
             ok: Token,
+            /// The point at which parsing failed
             fail: []const u8,
         },
         rest: []const u8,
@@ -256,68 +313,16 @@ pub fn ZpcParser(comptime Context: type, comptime Result: type) type {
     return fn (ctx: Context, input: []const u8) ZpcError!Result;
 }
 
+pub fn ZpcMapper(comptime Context: type, comptime Result: type) type {
+    return fn (ctx: Context, input: []const u8, result: Result) ZpcError!Result;
+}
+
 pub fn ZpcParserForTag(
     comptime Context: type,
     comptime Tag: type,
     comptime phase: ZpcPhase,
 ) type {
     return ZpcParser(Context, ZpcResult(ZpcToken(Tag, phase)));
-}
-
-pub const Predicate = fn (char: u8) bool;
-
-pub fn predAny() Predicate {
-    const shim = struct {
-        fn pred(_: u8) bool {
-            return true;
-        }
-    };
-    return shim.pred;
-}
-
-pub fn predAnd(a: Predicate, b: Predicate) Predicate {
-    const shim = struct {
-        fn pred(char: u8) bool {
-            return a(char) and b(char);
-        }
-    };
-    return shim.pred;
-}
-
-pub fn predOr(a: Predicate, b: Predicate) Predicate {
-    const shim = struct {
-        fn pred(char: u8) bool {
-            return a(char) or b(char);
-        }
-    };
-    return shim.pred;
-}
-
-pub fn predNot(p: Predicate) Predicate {
-    const shim = struct {
-        fn pred(char: u8) bool {
-            return !p(char);
-        }
-    };
-    return shim.pred;
-}
-
-pub fn predEqual(want: u8) Predicate {
-    const shim = struct {
-        fn pred(char: u8) bool {
-            return char == want;
-        }
-    };
-    return shim.pred;
-}
-
-pub fn predSet(charset: []const u8) Predicate {
-    const shim = struct {
-        fn pred(char: u8) bool {
-            return std.mem.containsAtLeastScalar(u8, charset, char, 1);
-        }
-    };
-    return shim.pred;
 }
 
 pub fn Zpc(comptime Context: type, comptime Tag: type) type {
@@ -335,7 +340,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         pub const Token = ZpcToken(Tag, phase);
         pub const Result = ZpcResult(Token);
         pub const Parser = ZpcParser(Context, Result);
-        pub const Mapper = fn (ctx: Context, result: Result) ZpcError!Result;
+        pub const Mapper = ZpcMapper(Context, Result);
 
         pub const Quantifier = struct {
             const Self = @This();
@@ -532,54 +537,47 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.optionalParser;
         }
 
-        pub fn discard(parser: Parser) Parser {
+        pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
             const shim = switch (phase) {
                 .comp => struct {
-                    fn discardParser(ctx: Context, input: []const u8) ZpcError!Result {
-                        const res = try parser(ctx, input);
-                        if (!res.matched()) return .initFail(res.tok.fail, input);
-                        return .initOk(.nothing, res.rest);
+                    fn mapParser(ctx: Context, input: []const u8) ZpcError!Result {
+                        return try mapper(ctx, input, try parser(ctx, input));
                     }
                 },
                 .run => struct {
-                    fn discardParser(ctx: Context, input: []const u8) ZpcError!Result {
+                    fn mapParser(ctx: Context, input: []const u8) ZpcError!Result {
                         var arena = std.heap.ArenaAllocator.init(ctx.allocator);
                         defer arena.deinit();
                         var tmp_ctx: Context = ctx;
                         tmp_ctx.allocator = arena.allocator();
-                        const res = try parser(tmp_ctx, input);
-                        if (!res.matched()) return .initFail(res.tok.fail, input);
-                        return .initOk(.nothing, res.rest);
+                        return try mapper(ctx, input, try parser(tmp_ctx, input));
                     }
                 },
             };
-            return shim.discardParser;
+            return shim.mapParser;
+        }
+
+        pub fn discard(parser: Parser) Parser {
+            const shim = struct {
+                fn disardMapper(_: Context, input: []const u8, res: Result) ZpcError!Result {
+                    if (!res.matched()) return .initFail(res.tok.fail, input);
+                    return .initOk(.nothing, res.rest);
+                }
+            };
+
+            return mapTemp(parser, shim.disardMapper);
         }
 
         pub fn span(tag: Tag, parser: Parser) Parser {
-            const shim = switch (phase) {
-                .comp => struct {
-                    fn matchParser(ctx: Context, input: []const u8) ZpcError!Result {
-                        const res = try parser(ctx, input);
-                        if (!res.matched()) return .initFail(res.tok.fail, input);
-                        const consumed: usize = input.len - res.rest.len;
-                        return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
-                    }
-                },
-                .run => struct {
-                    fn matchParser(ctx: Context, input: []const u8) ZpcError!Result {
-                        var arena = std.heap.ArenaAllocator.init(ctx.allocator);
-                        defer arena.deinit();
-                        var tmp_ctx: Context = ctx;
-                        tmp_ctx.allocator = arena.allocator();
-                        const res = try parser(tmp_ctx, input);
-                        if (!res.matched()) return .initFail(res.tok.fail, input);
-                        const consumed: usize = input.len - res.rest.len;
-                        return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
-                    }
-                },
+            const shim = struct {
+                fn spanMapper(_: Context, input: []const u8, res: Result) ZpcError!Result {
+                    if (!res.matched()) return .initFail(res.tok.fail, input);
+                    const consumed: usize = input.len - res.rest.len;
+                    return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
+                }
             };
-            return shim.matchParser;
+
+            return mapTemp(parser, shim.spanMapper);
         }
 
         pub fn flat(parser: Parser) Parser {
