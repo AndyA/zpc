@@ -72,6 +72,6 @@ pub fn main(init: std.process.Init) !void {
         \\"""Hello", "World""", Now
         \\1,2,3,4
     );
-    defer res.deinit(init.gpa);
+    defer res.deinit(ctx);
     print("{f}", .{res});
 }

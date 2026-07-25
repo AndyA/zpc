@@ -12,12 +12,76 @@ pub const ZpcError = error{OutOfMemory};
 
 pub const ZpcPhase = enum { comp, run };
 
+fn ZpcArrayList(comptime T: type) type {
+    return struct {
+        const Self = @This();
+        pub const empty: Self = .{};
+
+        list: std.ArrayList(T) = .empty,
+
+        pub fn deinit(self: *Self, ctx: anytype) void {
+            self.list.deinit(ctx.allocator);
+        }
+
+        pub fn append(self: *Self, ctx: anytype, item: T) ZpcError!void {
+            try self.list.append(ctx.allocator, item);
+        }
+
+        pub fn appendSlice(self: *Self, ctx: anytype, slice: []const T) ZpcError!void {
+            try self.list.appendSlice(ctx.allocator, slice);
+        }
+
+        pub fn toOwnedSlice(self: *Self, ctx: anytype) ZpcError![]const T {
+            return try self.list.toOwnedSlice(ctx.allocator);
+        }
+
+        pub fn freeList(ctx: anytype, list: []const T) void {
+            ctx.allocator.free(list);
+        }
+
+        pub fn items(self: Self) []const T {
+            return self.list.items;
+        }
+    };
+}
+
+fn ZpcComptimeArrayList(comptime T: type) type {
+    return struct {
+        const Self = @This();
+        pub const empty: Self = .{};
+
+        list: ct.ComptimeArrayList(T) = .empty,
+
+        pub fn deinit(self: *Self, _: anytype) void {
+            self.list.deinit(ct.non_allocator);
+        }
+
+        pub fn append(self: *Self, _: anytype, item: T) ZpcError!void {
+            try self.list.append(ct.non_allocator, item);
+        }
+
+        pub fn appendSlice(self: *Self, _: anytype, slice: []const T) ZpcError!void {
+            try self.list.appendSlice(ct.non_allocator, slice);
+        }
+
+        pub fn toOwnedSlice(self: *Self, _: anytype) ZpcError![]const T {
+            return try self.list.toOwnedSlice(ct.non_allocator);
+        }
+
+        pub fn freeList(_: anytype, _: []const T) void {}
+
+        pub fn items(self: Self) []const T {
+            return self.list.items;
+        }
+    };
+}
+
 pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
     return struct {
         const Self = @This();
         pub const ArrayList = switch (phase) {
-            .comp => ct.ComptimeArrayList(Self),
-            .run => std.ArrayList(Self),
+            .comp => ZpcComptimeArrayList(Self),
+            .run => ZpcArrayList(Self),
         };
         pub const NOP: Tag = @enumFromInt(0);
 
@@ -92,8 +156,8 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
             return .{ .tag = tag, .value = .{ .list = list } };
         }
 
-        pub fn initArrayList(alloc: Allocator, tag: Tag, array: *ArrayList) ZpcError!Self {
-            const list = try array.toOwnedSlice(alloc);
+        pub fn initArrayList(ctx: anytype, tag: Tag, array: *ArrayList) ZpcError!Self {
+            const list = try array.toOwnedSlice(ctx);
             return initList(tag, list);
         }
 
@@ -101,39 +165,39 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
             return self.value == .nothing;
         }
 
-        pub fn appendArrayList(self: Self, alloc: Allocator, array: *ArrayList) ZpcError!void {
+        pub fn appendArrayList(self: Self, ctx: anytype, array: *ArrayList) ZpcError!void {
             switch (self.value) {
                 .nothing => {},
-                .slice, .list => try array.append(alloc, self),
+                .slice, .list => try array.append(ctx, self),
                 .flat => |flat| {
-                    defer self.deinitShallow(alloc);
-                    try array.appendSlice(alloc, flat);
+                    defer self.deinitShallow(ctx);
+                    try array.appendSlice(ctx, flat);
                 },
             }
         }
 
-        pub fn deinit(self: Self, alloc: Allocator) void {
+        pub fn deinit(self: Self, ctx: anytype) void {
             switch (self.value) {
-                .list, .flat => |list| deinitList(list, alloc),
+                .list, .flat => |list| deinitList(list, ctx),
                 .nothing, .slice => {},
             }
         }
 
-        pub fn deinitShallow(self: Self, alloc: Allocator) void {
+        pub fn deinitShallow(self: Self, ctx: anytype) void {
             switch (self.value) {
-                .list, .flat => |list| alloc.free(list),
+                .list, .flat => |list| ArrayList.freeList(ctx, list),
                 .nothing, .slice => {},
             }
         }
 
-        pub fn deinitList(list: []const Self, alloc: Allocator) void {
-            for (list) |item| item.deinit(alloc);
-            alloc.free(list);
+        pub fn deinitList(list: []const Self, ctx: anytype) void {
+            for (list) |item| item.deinit(ctx);
+            ArrayList.freeList(ctx, list);
         }
 
-        pub fn deinitArrayList(list: *ArrayList, alloc: Allocator) void {
-            for (list.items) |item| item.deinit(alloc);
-            list.deinit(alloc);
+        pub fn deinitArrayList(list: *ArrayList, ctx: anytype) void {
+            for (list.items()) |item| item.deinit(ctx);
+            list.deinit(ctx);
         }
 
         pub fn children(self: Self) []const Self {
@@ -218,16 +282,16 @@ pub fn ZpcResult(comptime Token: type) type {
             return .{ .tok = .{ .ok = value }, .rest = rest };
         }
 
-        pub fn deinit(self: Self, alloc: Allocator) void {
+        pub fn deinit(self: Self, ctx: anytype) void {
             switch (self.tok) {
-                .ok => |ok| ok.deinit(alloc),
+                .ok => |ok| ok.deinit(ctx),
                 .fail => {},
             }
         }
 
-        pub fn deinitShallow(self: Self, alloc: Allocator) void {
+        pub fn deinitShallow(self: Self, ctx: anytype) void {
             switch (self.tok) {
-                .ok => |ok| ok.deinitShallow(alloc),
+                .ok => |ok| ok.deinitShallow(ctx),
                 .fail => {},
             }
         }
@@ -315,8 +379,6 @@ pub fn ZpcComptime(comptime Context: type, comptime Tag: type) type {
 }
 
 fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
-    if (!@hasField(Context, "allocator"))
-        @compileError("Context must have an allocator field");
     return struct {
         pub const Token = ZpcToken(Tag, phase);
         pub const Result = ZpcResult(Token);
@@ -429,19 +491,19 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             const shim = struct {
                 fn seqParser(ctx: Context, input: []const u8) ZpcError!Result {
                     var list: Token.ArrayList = .empty;
-                    errdefer Token.deinitArrayList(&list, ctx.allocator);
+                    errdefer Token.deinitArrayList(&list, ctx);
                     var tail = input;
                     inline for (parsers) |parser| {
                         const res = try parser(ctx, tail);
                         if (!res.matched()) {
-                            Token.deinitArrayList(&list, ctx.allocator);
+                            Token.deinitArrayList(&list, ctx);
                             return .initFail(res.tok.fail, input);
                         }
                         tail = res.rest;
-                        try res.tok.ok.appendArrayList(ctx.allocator, &list);
+                        try res.tok.ok.appendArrayList(ctx, &list);
                     }
 
-                    return .initOk(try .initArrayList(ctx.allocator, tag, &list), tail);
+                    return .initOk(try .initArrayList(ctx, tag, &list), tail);
                 }
             };
             return shim.seqParser;
@@ -451,12 +513,12 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             const shim = struct {
                 fn leftParser(ctx: Context, input: []const u8) ZpcError!Result {
                     const lres = try lp(ctx, input);
-                    errdefer lres.deinit(ctx.allocator);
+                    errdefer lres.deinit(ctx);
                     if (!lres.matched()) return .initFail(lres.tok.fail, input);
                     const rres = try rp(ctx, lres.rest);
-                    defer rres.deinit(ctx.allocator);
+                    defer rres.deinit(ctx);
                     if (!rres.matched()) {
-                        lres.deinit(ctx.allocator);
+                        lres.deinit(ctx);
                         return .initFail(rres.tok.fail, input);
                     }
                     return .initOk(lres.tok.ok, rres.rest);
@@ -469,7 +531,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             const shim = struct {
                 fn rightParser(ctx: Context, input: []const u8) ZpcError!Result {
                     const lres = try lp(ctx, input);
-                    defer lres.deinit(ctx.allocator);
+                    defer lres.deinit(ctx);
                     if (!lres.matched()) return .initFail(lres.tok.fail, input);
                     const rres = try rp(ctx, lres.rest);
                     if (!rres.matched()) return .initFail(rres.tok.fail, input);
@@ -488,20 +550,20 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             const shim = struct {
                 fn manyParser(ctx: Context, input: []const u8) ZpcError!Result {
                     var list: Token.ArrayList = .empty;
-                    errdefer Token.deinitArrayList(&list, ctx.allocator);
+                    errdefer Token.deinitArrayList(&list, ctx);
                     var tail = input;
-                    while (list.items.len < bounds.max) {
+                    while (list.items().len < bounds.max) {
                         const res = try parser(ctx, tail);
                         if (!res.matched()) {
-                            if (list.items.len >= bounds.min)
+                            if (list.items().len >= bounds.min)
                                 break;
-                            Token.deinitArrayList(&list, ctx.allocator);
+                            Token.deinitArrayList(&list, ctx);
                             return .initFail(res.tok.fail, input);
                         }
                         tail = res.rest;
-                        try res.tok.ok.appendArrayList(ctx.allocator, &list);
+                        try res.tok.ok.appendArrayList(ctx, &list);
                     }
-                    return .initOk(try .initArrayList(ctx.allocator, tag, &list), tail);
+                    return .initOk(try .initArrayList(ctx, tag, &list), tail);
                 }
             };
             return shim.manyParser;
@@ -521,7 +583,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         pub fn discard(parser: Parser) Parser {
             const shim = struct {
                 fn discardParser(ctx: Context, input: []const u8) ZpcError!Result {
-                    var arena = std.heap.ArenaAllocator.init(ctx.allocator);
+                    var arena = std.heap.ArenaAllocator.init(ctx.allocator); // TODO
                     defer arena.deinit();
                     var tmp_ctx: Context = ctx;
                     tmp_ctx.allocator = arena.allocator();
@@ -573,7 +635,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                 fn advancesParser(ctx: Context, input: []const u8) ZpcError!Result {
                     const res = try parser(ctx, input);
                     if (res.matched() and input.len == res.rest.len) {
-                        res.deinit(ctx.allocator);
+                        res.deinit(ctx);
                         return .initFailHere(input);
                     }
                     return res;
@@ -592,7 +654,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                             .nothing, .slice => {},
                             .flat, .list => |list| {
                                 if (list.len == 1) {
-                                    defer res.deinitShallow(ctx.allocator);
+                                    defer res.deinitShallow(ctx);
                                     return .initOk(list[0], res.rest);
                                 }
                             },
@@ -609,7 +671,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             const shim = struct {
                 fn refineParser(ctx: Context, input: []const u8) ZpcError!Result {
                     const lres = try lower_parser(ctx, input);
-                    errdefer lres.deinit(ctx.allocator);
+                    errdefer lres.deinit(ctx);
 
                     if (!lres.matched())
                         return lres;
@@ -620,7 +682,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                     if (!ures.matched())
                         return lres;
 
-                    defer lres.deinit(ctx.allocator);
+                    defer lres.deinit(ctx);
                     ures.rest = lres.rest;
                     return ures;
                 }
@@ -678,7 +740,7 @@ fn checkAndConsume(
     expected: TestResult,
     actual: TestResult,
 ) !void {
-    defer actual.deinit(ctx.allocator);
+    defer actual.deinit(ctx);
     try expectEqualDeep(expected, actual);
 }
 
@@ -1198,9 +1260,7 @@ test "recurse" {
 }
 
 test ZpcComptime {
-    const Context = struct {
-        allocator: Allocator,
-    };
+    const Context = struct {};
 
     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
 
@@ -1211,7 +1271,7 @@ test ZpcComptime {
     });
 
     const res = comptime blk: {
-        const ctx: Context = .{ .allocator = ct.non_allocator };
+        const ctx: Context = .{};
         break :blk try parseAlphaNum(ctx, "123ABC.");
     };
 

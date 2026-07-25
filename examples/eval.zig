@@ -154,7 +154,7 @@ pub fn main(init: std.process.Init) !void {
     for (expressions) |path| {
         print("expr: {s}\n\n", .{path});
         const res = try fullParser(ctx, path);
-        defer res.deinit(init.gpa);
+        defer res.deinit(ctx);
         print("{f}\n", .{res});
         if (res.matched())
             print("result: {d}\n\n", .{try eval(res.tok.ok)});

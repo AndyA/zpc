@@ -112,6 +112,6 @@ pub fn main(init: std.process.Init) !void {
         \\  "empty": [""]
         \\}
     );
-    defer res.deinit(init.gpa);
+    defer res.deinit(ctx);
     print("{f}", .{res});
 }
