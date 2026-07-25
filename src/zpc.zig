@@ -28,7 +28,7 @@ pub const Quantifier = struct {
     max: usize = std.math.maxInt(usize),
 };
 
-pub fn Space(comptime Item: type) type {
+pub fn Space(Item: type) type {
     return struct {
         pub const Predicate = fn (item: Item) bool;
 
@@ -90,7 +90,7 @@ pub fn Space(comptime Item: type) type {
 
         pub const Phase = enum { comp, run };
 
-        pub fn TokenType(comptime Tag: type, comptime phase: Phase) type {
+        pub fn TokenType(Tag: type, phase: Phase) type {
             return struct {
                 const Self = @This();
                 pub const ArrayList = switch (phase) {
@@ -251,7 +251,7 @@ pub fn Space(comptime Item: type) type {
             };
         }
 
-        pub fn ResultType(comptime Token: type) type {
+        pub fn ResultType(Token: type) type {
             return struct {
                 const Self = @This();
 
@@ -331,33 +331,29 @@ pub fn Space(comptime Item: type) type {
             };
         }
 
-        pub fn ParserType(comptime Context: type, comptime Result: type) type {
+        pub fn ParserType(Context: type, Result: type) type {
             return fn (ctx: Context, input: []const Item) Error!Result;
         }
 
-        pub fn MapperType(comptime Context: type, comptime Result: type) type {
+        pub fn MapperType(Context: type, Result: type) type {
             return fn (ctx: Context, input: []const Item, result: Result) Error!Result;
         }
 
-        pub fn ParserTypeForTag(
-            comptime Context: type,
-            comptime Tag: type,
-            comptime phase: Phase,
-        ) type {
+        pub fn ParserTypeForTag(Context: type, Tag: type, phase: Phase) type {
             return ParserType(Context, ResultType(TokenType(Tag, phase)));
         }
 
-        pub fn Parsers(comptime Context: type, comptime Tag: type) type {
+        pub fn Parsers(Context: type, Tag: type) type {
             if (!@hasField(Context, "allocator"))
                 @compileError("Context must have an allocator field");
             return makeParsers(Context, Tag, .run);
         }
 
-        pub fn ComptimeParsers(comptime Context: type, comptime Tag: type) type {
+        pub fn ComptimeParsers(Context: type, Tag: type) type {
             return makeParsers(Context, Tag, .comp);
         }
 
-        fn makeParsers(comptime Context: type, comptime Tag: type, phase: Phase) type {
+        fn makeParsers(Context: type, Tag: type, phase: Phase) type {
             return struct {
                 pub const Token = TokenType(Tag, phase);
                 pub const Result = ResultType(Token);
@@ -561,7 +557,11 @@ pub fn Space(comptime Item: type) type {
 
                 pub fn discard(parser: Parser) Parser {
                     const shim = struct {
-                        fn disardMapper(_: Context, input: []const Item, res: Result) Error!Result {
+                        fn disardMapper(
+                            _: Context,
+                            input: []const Item,
+                            res: Result,
+                        ) Error!Result {
                             if (!res.matched()) return .initFail(res.tok.fail, input);
                             return .initOk(.nothing, res.rest);
                         }
@@ -572,7 +572,11 @@ pub fn Space(comptime Item: type) type {
 
                 pub fn span(tag: Tag, parser: Parser) Parser {
                     const shim = struct {
-                        fn spanMapper(_: Context, input: []const Item, res: Result) Error!Result {
+                        fn spanMapper(
+                            _: Context,
+                            input: []const Item,
+                            res: Result,
+                        ) Error!Result {
                             if (!res.matched()) return .initFail(res.tok.fail, input);
                             const consumed: usize = input.len - res.rest.len;
                             return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
