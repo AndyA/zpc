@@ -16,7 +16,7 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
     return struct {
         const Self = @This();
         pub const ArrayList = switch (phase) {
-            .comp => ct.ComptimeArray(Self),
+            .comp => ct.ComptimeArrayList(Self),
             .run => std.ArrayList(Self),
         };
         pub const NOP: Tag = @enumFromInt(0);

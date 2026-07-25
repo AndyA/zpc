@@ -24,7 +24,7 @@ pub const non_allocator: Allocator = .{
     .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free },
 };
 
-pub fn ComptimeArray(comptime T: type) type {
+pub fn ComptimeArrayList(comptime T: type) type {
     return struct {
         const Self = @This();
         items: []const T = &[_]T{},
