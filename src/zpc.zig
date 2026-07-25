@@ -1197,26 +1197,26 @@ test "recurse" {
     try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
 }
 
-// test ZpcComptime {
-//     const Context = struct {
-//         allocator: Allocator,
-//     };
+test ZpcComptime {
+    const Context = struct {
+        allocator: Allocator,
+    };
 
-//     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
+    const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
 
-//     const P = ZpcComptime(Context, Tag);
+    const P = ZpcComptime(Context, Tag);
 
-//     const res = blk: {
-//         const parseAlphaNum = P.seq(.MULTI, &.{
-//             P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-//             P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
-//         });
-//         const ctx: Context = .{ .allocator = ct.non_allocator };
-//         break :blk try parseAlphaNum(ctx, "123ABC.");
-//     };
+    const res = comptime blk: {
+        const parseAlphaNum = P.seq(.MULTI, &.{
+            P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+            P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+        });
+        const ctx: Context = .{ .allocator = ct.non_allocator };
+        break :blk try parseAlphaNum(ctx, "123ABC.");
+    };
 
-//     try expectEqualDeep(P.Result.initOk(.initList(.MULTI, &.{
-//         .initSlice(.DIGIT, "123"),
-//         .initSlice(.ALPHA, "ABC"),
-//     }), "."), res);
-// }
+    try expectEqualDeep(P.Result.initOk(.initList(.MULTI, &.{
+        .initSlice(.DIGIT, "123"),
+        .initSlice(.ALPHA, "ABC"),
+    }), "."), res);
+}
