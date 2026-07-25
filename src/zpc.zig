@@ -68,6 +68,8 @@ pub const ZpcError = error{OutOfMemory};
 
 pub const ZpcPhase = enum { comp, run };
 
+const Item = u8;
+
 pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
     return struct {
         const Self = @This();
@@ -131,7 +133,7 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
         tag: Tag = NOP,
         value: union(enum(u8)) {
             nothing: void,
-            slice: []const u8,
+            slice: []const Item,
             list: []const Self,
             flat: []const Self, // Like a list but flattens into its parent
         },
@@ -154,7 +156,7 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
             }
         }
 
-        pub fn initSlice(tag: Tag, slice: []const u8) Self {
+        pub fn initSlice(tag: Tag, slice: []const Item) Self {
             return .{ .tag = tag, .value = .{ .slice = slice } };
         }
 
@@ -268,24 +270,24 @@ pub fn ZpcResult(comptime Token: type) type {
         tok: union(enum) {
             ok: Token,
             /// The point at which parsing failed
-            fail: []const u8,
+            fail: []const Item,
         },
         /// The rest of the input
-        rest: []const u8,
+        rest: []const Item,
 
         pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
             try (Formatter{ .token = &self, .pretty = true }).format(writer);
         }
 
-        pub fn initFail(at: []const u8, rest: []const u8) Self {
+        pub fn initFail(at: []const Item, rest: []const Item) Self {
             return .{ .tok = .{ .fail = at }, .rest = rest };
         }
 
-        pub fn initFailHere(rest: []const u8) Self {
+        pub fn initFailHere(rest: []const Item) Self {
             return initFail(rest, rest);
         }
 
-        pub fn initOk(value: Token, rest: []const u8) Self {
+        pub fn initOk(value: Token, rest: []const Item) Self {
             return .{ .tok = .{ .ok = value }, .rest = rest };
         }
 
@@ -310,11 +312,11 @@ pub fn ZpcResult(comptime Token: type) type {
 }
 
 pub fn ZpcParser(comptime Context: type, comptime Result: type) type {
-    return fn (ctx: Context, input: []const u8) ZpcError!Result;
+    return fn (ctx: Context, input: []const Item) ZpcError!Result;
 }
 
 pub fn ZpcMapper(comptime Context: type, comptime Result: type) type {
-    return fn (ctx: Context, input: []const u8, result: Result) ZpcError!Result;
+    return fn (ctx: Context, input: []const Item, result: Result) ZpcError!Result;
 }
 
 pub fn ZpcParserForTag(
@@ -362,11 +364,11 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             max: usize = std.math.maxInt(usize),
         };
 
-        pub fn keyword(tag: Tag, str: []const u8) Parser {
+        pub fn keyword(tag: Tag, str: []const Item) Parser {
             assert(str.len != 0);
             const shim = struct {
-                fn keywordParser(_: Context, input: []const u8) ZpcError!Result {
-                    if (input.len >= str.len and std.mem.eql(u8, input[0..str.len], str))
+                fn keywordParser(_: Context, input: []const Item) ZpcError!Result {
+                    if (input.len >= str.len and std.mem.eql(Item, input[0..str.len], str))
                         return .initOk(.initSlice(tag, str), input[str.len..]);
                     return .initFailHere(input);
                 }
@@ -374,13 +376,13 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
             return shim.keywordParser;
         }
 
-        pub fn literal(str: []const u8) Parser {
+        pub fn literal(str: []const Item) Parser {
             return keyword(Token.NOP, str);
         }
 
-        pub fn always(tag: Tag, frag: []const u8) Parser {
+        pub fn always(tag: Tag, frag: []const Item) Parser {
             const shim = struct {
-                fn alwaysParser(_: Context, input: []const u8) ZpcError!Result {
+                fn alwaysParser(_: Context, input: []const Item) ZpcError!Result {
                     return .initOk(.initSlice(tag, frag), input);
                 }
             };
@@ -389,7 +391,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn eof() Parser {
             const shim = struct {
-                fn eofParser(_: Context, input: []const u8) ZpcError!Result {
+                fn eofParser(_: Context, input: []const Item) ZpcError!Result {
                     if (input.len == 0)
                         return .initOk(.nothing, input);
                     return .initFailHere(input);
@@ -400,7 +402,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn rest() Parser {
             const shim = struct {
-                fn restParser(_: Context, input: []const u8) ZpcError!Result {
+                fn restParser(_: Context, input: []const Item) ZpcError!Result {
                     return .initOk(.initSlice(Token.NOP, input), "");
                 }
             };
@@ -410,7 +412,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         pub fn takeWhile(tag: Tag, bounds: Quantifier, pred: Predicate) Parser {
             assert(bounds.min <= bounds.max);
             const shim = struct {
-                fn takeWhileParser(_: Context, input: []const u8) ZpcError!Result {
+                fn takeWhileParser(_: Context, input: []const Item) ZpcError!Result {
                     const len = @min(input.len, bounds.max);
                     var pos: usize = 0;
                     while (pos < len and pred(input[pos]))
@@ -425,11 +427,11 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn alt(parsers: []const *const Parser) Parser {
             const shim = struct {
-                fn furthest(a: []const u8, b: []const u8) []const u8 {
+                fn furthest(a: []const Item, b: []const Item) []const Item {
                     return if (a.len < b.len) a else b;
                 }
 
-                fn altParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn altParser(ctx: Context, input: []const Item) ZpcError!Result {
                     var hwm = input;
                     inline for (parsers) |parser| {
                         const res = try parser(ctx, input);
@@ -446,7 +448,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
             const shim = struct {
-                fn seqParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn seqParser(ctx: Context, input: []const Item) ZpcError!Result {
                     var list: Token.ArrayList = .empty;
                     errdefer Token.deinitArrayList(&list, ctx);
                     var tail = input;
@@ -468,7 +470,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn left(lp: Parser, rp: Parser) Parser {
             const shim = struct {
-                fn leftParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn leftParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const lres = try lp(ctx, input);
                     errdefer lres.deinit(ctx);
                     if (!lres.matched()) return .initFail(lres.tok.fail, input);
@@ -486,7 +488,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn right(lp: Parser, rp: Parser) Parser {
             const shim = struct {
-                fn rightParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn rightParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const lres = try lp(ctx, input);
                     defer lres.deinit(ctx);
                     if (!lres.matched()) return .initFail(lres.tok.fail, input);
@@ -505,7 +507,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         pub fn many(tag: Tag, bounds: Quantifier, parser: Parser) Parser {
             assert(bounds.min <= bounds.max);
             const shim = struct {
-                fn manyParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn manyParser(ctx: Context, input: []const Item) ZpcError!Result {
                     var list: Token.ArrayList = .empty;
                     errdefer Token.deinitArrayList(&list, ctx);
                     var tail = input;
@@ -528,7 +530,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn optional(parser: Parser) Parser {
             const shim = struct {
-                fn optionalParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn optionalParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const res = try parser(ctx, input);
                     if (res.matched()) return res;
                     return .initOk(.nothing, input);
@@ -540,12 +542,12 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
             const shim = switch (phase) {
                 .comp => struct {
-                    fn mapParser(ctx: Context, input: []const u8) ZpcError!Result {
+                    fn mapParser(ctx: Context, input: []const Item) ZpcError!Result {
                         return try mapper(ctx, input, try parser(ctx, input));
                     }
                 },
                 .run => struct {
-                    fn mapParser(ctx: Context, input: []const u8) ZpcError!Result {
+                    fn mapParser(ctx: Context, input: []const Item) ZpcError!Result {
                         var arena = std.heap.ArenaAllocator.init(ctx.allocator);
                         defer arena.deinit();
                         var tmp_ctx: Context = ctx;
@@ -559,7 +561,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn discard(parser: Parser) Parser {
             const shim = struct {
-                fn disardMapper(_: Context, input: []const u8, res: Result) ZpcError!Result {
+                fn disardMapper(_: Context, input: []const Item, res: Result) ZpcError!Result {
                     if (!res.matched()) return .initFail(res.tok.fail, input);
                     return .initOk(.nothing, res.rest);
                 }
@@ -570,7 +572,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn span(tag: Tag, parser: Parser) Parser {
             const shim = struct {
-                fn spanMapper(_: Context, input: []const u8, res: Result) ZpcError!Result {
+                fn spanMapper(_: Context, input: []const Item, res: Result) ZpcError!Result {
                     if (!res.matched()) return .initFail(res.tok.fail, input);
                     const consumed: usize = input.len - res.rest.len;
                     return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
@@ -582,7 +584,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn flat(parser: Parser) Parser {
             const shim = struct {
-                fn flatParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn flatParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const res = try parser(ctx, input);
                     if (res.matched()) {
                         return switch (res.tok.ok.value) {
@@ -601,7 +603,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
 
         pub fn advances(parser: Parser) Parser {
             const shim = struct {
-                fn advancesParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn advancesParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const res = try parser(ctx, input);
                     if (res.matched() and input.len == res.rest.len) {
                         res.deinit(ctx);
@@ -616,7 +618,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         // If we receive a single element list lower it to the first item
         pub fn lower(parser: Parser) Parser {
             const shim = struct {
-                fn lowerParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn lowerParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const res = try parser(ctx, input);
                     if (res.matched()) {
                         switch (res.tok.ok.value) {
@@ -638,7 +640,7 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
             const upper_complete_parser = left(upper_parser, eof());
             const shim = struct {
-                fn refineParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn refineParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const lres = try lower_parser(ctx, input);
                     errdefer lres.deinit(ctx);
 
@@ -660,9 +662,9 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         }
 
         // Call a parser that is pointed to by a field on the context.
-        pub fn recurse(field_name: []const u8) Parser {
+        pub fn recurse(field_name: []const Item) Parser {
             const shim = struct {
-                fn recurseParser(ctx: Context, input: []const u8) ZpcError!Result {
+                fn recurseParser(ctx: Context, input: []const Item) ZpcError!Result {
                     const parser = @field(ctx, field_name);
                     return parser(ctx, input);
                 }
