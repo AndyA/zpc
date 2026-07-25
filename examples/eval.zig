@@ -6,7 +6,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const zpc = @import("zpc").ZpcSpace(u8);
+const zpc = @import("zpc").Space(u8);
 
 const Tag = enum(u8) {
     N, // means don't care - but `N` is shorter
@@ -33,10 +33,10 @@ const Tag = enum(u8) {
 
 const Context = struct {
     allocator: Allocator,
-    expr: *const zpc.ZpcParserForTag(@This(), Tag, .run),
+    expr: *const zpc.ParserTypeForTag(@This(), Tag, .run),
 };
 
-const P = zpc.Zpc(Context, Tag);
+const P = zpc.Factory(Context, Tag);
 
 const skipSpace = P.takeWhile(.N, .zeroOrMore, std.ascii.isWhitespace);
 

@@ -8,9 +8,29 @@ const Allocator = std.mem.Allocator;
 
 const ct = @import("comptime.zig");
 
-pub fn ZpcSpace(comptime Item: type) type {
+pub const Quantifier = struct {
+    const Self = @This();
+    pub const zeroOrMore: Self = .{};
+    pub const zeroOrOne: Self = .{ .max = 1 };
+    pub const oneOrMore: Self = .{ .min = 1 };
+    pub const one: Self = exactly(1);
+
+    pub fn range(min: usize, max: usize) Self {
+        assert(min <= max);
+        return .{ .min = min, .max = max };
+    }
+
+    pub fn exactly(n: usize) Self {
+        return range(n, n);
+    }
+
+    min: usize = 0,
+    max: usize = std.math.maxInt(usize),
+};
+
+pub fn Space(comptime Item: type) type {
     return struct {
-        pub const Predicate = fn (char: Item) bool;
+        pub const Predicate = fn (item: Item) bool;
 
         pub fn predAny() Predicate {
             const shim = struct {
@@ -23,8 +43,8 @@ pub fn ZpcSpace(comptime Item: type) type {
 
         pub fn predAnd(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
-                fn pred(char: Item) bool {
-                    return a(char) and b(char);
+                fn pred(item: Item) bool {
+                    return a(item) and b(item);
                 }
             };
             return shim.pred;
@@ -32,8 +52,8 @@ pub fn ZpcSpace(comptime Item: type) type {
 
         pub fn predOr(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
-                fn pred(char: Item) bool {
-                    return a(char) or b(char);
+                fn pred(item: Item) bool {
+                    return a(item) or b(item);
                 }
             };
             return shim.pred;
@@ -41,8 +61,8 @@ pub fn ZpcSpace(comptime Item: type) type {
 
         pub fn predNot(p: Predicate) Predicate {
             const shim = struct {
-                fn pred(char: Item) bool {
-                    return !p(char);
+                fn pred(item: Item) bool {
+                    return !p(item);
                 }
             };
             return shim.pred;
@@ -50,8 +70,8 @@ pub fn ZpcSpace(comptime Item: type) type {
 
         pub fn predEqual(want: Item) Predicate {
             const shim = struct {
-                fn pred(char: Item) bool {
-                    return char == want;
+                fn pred(item: Item) bool {
+                    return item == want;
                 }
             };
             return shim.pred;
@@ -59,18 +79,18 @@ pub fn ZpcSpace(comptime Item: type) type {
 
         pub fn predSet(charset: []const Item) Predicate {
             const shim = struct {
-                fn pred(char: Item) bool {
-                    return std.mem.containsAtLeastScalar(Item, charset, char, 1);
+                fn pred(item: Item) bool {
+                    return std.mem.containsAtLeastScalar(Item, charset, item, 1);
                 }
             };
             return shim.pred;
         }
 
-        pub const ZpcError = error{OutOfMemory};
+        pub const Error = error{OutOfMemory};
 
-        pub const ZpcPhase = enum { comp, run };
+        pub const Phase = enum { comp, run };
 
-        pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
+        pub fn TokenType(comptime Tag: type, comptime phase: Phase) type {
             return struct {
                 const Self = @This();
                 pub const ArrayList = switch (phase) {
@@ -164,7 +184,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                     return .{ .tag = tag, .value = .{ .list = list } };
                 }
 
-                pub fn initArrayList(ctx: anytype, tag: Tag, array: *ArrayList) ZpcError!Self {
+                pub fn initArrayList(ctx: anytype, tag: Tag, array: *ArrayList) Error!Self {
                     const list = try array.toOwnedSlice(getAlloc(ctx));
                     return initList(tag, list);
                 }
@@ -173,7 +193,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                     return self.value == .nothing;
                 }
 
-                pub fn appendArrayList(self: Self, ctx: anytype, array: *ArrayList) ZpcError!void {
+                pub fn appendArrayList(self: Self, ctx: anytype, array: *ArrayList) Error!void {
                     switch (self.value) {
                         .nothing => {},
                         .slice, .list => try array.append(getAlloc(ctx), self),
@@ -231,7 +251,7 @@ pub fn ZpcSpace(comptime Item: type) type {
             };
         }
 
-        pub fn ZpcResult(comptime Token: type) type {
+        pub fn ResultType(comptime Token: type) type {
             return struct {
                 const Self = @This();
 
@@ -311,63 +331,43 @@ pub fn ZpcSpace(comptime Item: type) type {
             };
         }
 
-        pub fn ZpcParser(comptime Context: type, comptime Result: type) type {
-            return fn (ctx: Context, input: []const Item) ZpcError!Result;
+        pub fn ParserType(comptime Context: type, comptime Result: type) type {
+            return fn (ctx: Context, input: []const Item) Error!Result;
         }
 
-        pub fn ZpcMapper(comptime Context: type, comptime Result: type) type {
-            return fn (ctx: Context, input: []const Item, result: Result) ZpcError!Result;
+        pub fn MapperType(comptime Context: type, comptime Result: type) type {
+            return fn (ctx: Context, input: []const Item, result: Result) Error!Result;
         }
 
-        pub fn ZpcParserForTag(
+        pub fn ParserTypeForTag(
             comptime Context: type,
             comptime Tag: type,
-            comptime phase: ZpcPhase,
+            comptime phase: Phase,
         ) type {
-            return ZpcParser(Context, ZpcResult(ZpcToken(Tag, phase)));
+            return ParserType(Context, ResultType(TokenType(Tag, phase)));
         }
 
-        pub fn Zpc(comptime Context: type, comptime Tag: type) type {
+        pub fn Factory(comptime Context: type, comptime Tag: type) type {
             if (!@hasField(Context, "allocator"))
                 @compileError("Context must have an allocator field");
-            return make_zpc(Context, Tag, .run);
+            return make_factory(Context, Tag, .run);
         }
 
-        pub fn ZpcComptime(comptime Context: type, comptime Tag: type) type {
-            return make_zpc(Context, Tag, .comp);
+        pub fn ComptimeFactory(comptime Context: type, comptime Tag: type) type {
+            return make_factory(Context, Tag, .comp);
         }
 
-        fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
+        fn make_factory(comptime Context: type, comptime Tag: type, phase: Phase) type {
             return struct {
-                pub const Token = ZpcToken(Tag, phase);
-                pub const Result = ZpcResult(Token);
-                pub const Parser = ZpcParser(Context, Result);
-                pub const Mapper = ZpcMapper(Context, Result);
-
-                pub const Quantifier = struct {
-                    const Self = @This();
-                    pub const zeroOrMore: Self = .{};
-                    pub const zeroOrOne: Self = .{ .max = 1 };
-                    pub const oneOrMore: Self = .{ .min = 1 };
-                    pub const one: Self = exactly(1);
-
-                    pub fn range(min: usize, max: usize) Self {
-                        assert(min <= max);
-                        return .{ .min = min, .max = max };
-                    }
-
-                    pub fn exactly(n: usize) Self {
-                        return range(n, n);
-                    }
-
-                    min: usize = 0,
-                    max: usize = std.math.maxInt(usize),
-                };
+                pub const Token = TokenType(Tag, phase);
+                pub const Result = ResultType(Token);
+                pub const Parser = ParserType(Context, Result);
+                pub const Mapper = MapperType(Context, Result);
 
                 pub fn keyword(tag: Tag, str: []const Item) Parser {
                     assert(str.len != 0);
                     const shim = struct {
-                        fn keywordParser(_: Context, input: []const Item) ZpcError!Result {
+                        fn keywordParser(_: Context, input: []const Item) Error!Result {
                             if (input.len >= str.len and std.mem.eql(Item, input[0..str.len], str))
                                 return .initOk(.initSlice(tag, str), input[str.len..]);
                             return .initFailHere(input);
@@ -382,7 +382,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn always(tag: Tag, frag: []const Item) Parser {
                     const shim = struct {
-                        fn alwaysParser(_: Context, input: []const Item) ZpcError!Result {
+                        fn alwaysParser(_: Context, input: []const Item) Error!Result {
                             return .initOk(.initSlice(tag, frag), input);
                         }
                     };
@@ -391,7 +391,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn eof() Parser {
                     const shim = struct {
-                        fn eofParser(_: Context, input: []const Item) ZpcError!Result {
+                        fn eofParser(_: Context, input: []const Item) Error!Result {
                             if (input.len == 0)
                                 return .initOk(.nothing, input);
                             return .initFailHere(input);
@@ -402,7 +402,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn rest() Parser {
                     const shim = struct {
-                        fn restParser(_: Context, input: []const Item) ZpcError!Result {
+                        fn restParser(_: Context, input: []const Item) Error!Result {
                             return .initOk(.initSlice(Token.NOP, input), "");
                         }
                     };
@@ -412,7 +412,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                 pub fn takeWhile(tag: Tag, bounds: Quantifier, pred: Predicate) Parser {
                     assert(bounds.min <= bounds.max);
                     const shim = struct {
-                        fn takeWhileParser(_: Context, input: []const Item) ZpcError!Result {
+                        fn takeWhileParser(_: Context, input: []const Item) Error!Result {
                             const len = @min(input.len, bounds.max);
                             var pos: usize = 0;
                             while (pos < len and pred(input[pos]))
@@ -431,7 +431,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                             return if (a.len < b.len) a else b;
                         }
 
-                        fn altParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn altParser(ctx: Context, input: []const Item) Error!Result {
                             var hwm = input;
                             inline for (parsers) |parser| {
                                 const res = try parser(ctx, input);
@@ -448,7 +448,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
                     const shim = struct {
-                        fn seqParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn seqParser(ctx: Context, input: []const Item) Error!Result {
                             var list: Token.ArrayList = .empty;
                             errdefer Token.deinitArrayList(&list, ctx);
                             var tail = input;
@@ -470,7 +470,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn left(lp: Parser, rp: Parser) Parser {
                     const shim = struct {
-                        fn leftParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn leftParser(ctx: Context, input: []const Item) Error!Result {
                             const lres = try lp(ctx, input);
                             errdefer lres.deinit(ctx);
                             if (!lres.matched()) return .initFail(lres.tok.fail, input);
@@ -488,7 +488,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn right(lp: Parser, rp: Parser) Parser {
                     const shim = struct {
-                        fn rightParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn rightParser(ctx: Context, input: []const Item) Error!Result {
                             const lres = try lp(ctx, input);
                             defer lres.deinit(ctx);
                             if (!lres.matched()) return .initFail(lres.tok.fail, input);
@@ -507,7 +507,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                 pub fn many(tag: Tag, bounds: Quantifier, parser: Parser) Parser {
                     assert(bounds.min <= bounds.max);
                     const shim = struct {
-                        fn manyParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn manyParser(ctx: Context, input: []const Item) Error!Result {
                             var list: Token.ArrayList = .empty;
                             errdefer Token.deinitArrayList(&list, ctx);
                             var tail = input;
@@ -530,7 +530,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn optional(parser: Parser) Parser {
                     const shim = struct {
-                        fn optionalParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn optionalParser(ctx: Context, input: []const Item) Error!Result {
                             const res = try parser(ctx, input);
                             if (res.matched()) return res;
                             return .initOk(.nothing, input);
@@ -542,12 +542,12 @@ pub fn ZpcSpace(comptime Item: type) type {
                 pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
                     const shim = switch (phase) {
                         .comp => struct {
-                            fn mapParser(ctx: Context, input: []const Item) ZpcError!Result {
+                            fn mapParser(ctx: Context, input: []const Item) Error!Result {
                                 return try mapper(ctx, input, try parser(ctx, input));
                             }
                         },
                         .run => struct {
-                            fn mapParser(ctx: Context, input: []const Item) ZpcError!Result {
+                            fn mapParser(ctx: Context, input: []const Item) Error!Result {
                                 var arena = std.heap.ArenaAllocator.init(ctx.allocator);
                                 defer arena.deinit();
                                 var tmp_ctx: Context = ctx;
@@ -561,7 +561,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn discard(parser: Parser) Parser {
                     const shim = struct {
-                        fn disardMapper(_: Context, input: []const Item, res: Result) ZpcError!Result {
+                        fn disardMapper(_: Context, input: []const Item, res: Result) Error!Result {
                             if (!res.matched()) return .initFail(res.tok.fail, input);
                             return .initOk(.nothing, res.rest);
                         }
@@ -572,7 +572,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn span(tag: Tag, parser: Parser) Parser {
                     const shim = struct {
-                        fn spanMapper(_: Context, input: []const Item, res: Result) ZpcError!Result {
+                        fn spanMapper(_: Context, input: []const Item, res: Result) Error!Result {
                             if (!res.matched()) return .initFail(res.tok.fail, input);
                             const consumed: usize = input.len - res.rest.len;
                             return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
@@ -584,7 +584,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn flat(parser: Parser) Parser {
                     const shim = struct {
-                        fn flatParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn flatParser(ctx: Context, input: []const Item) Error!Result {
                             const res = try parser(ctx, input);
                             if (res.matched()) {
                                 return switch (res.tok.ok.value) {
@@ -603,7 +603,7 @@ pub fn ZpcSpace(comptime Item: type) type {
 
                 pub fn advances(parser: Parser) Parser {
                     const shim = struct {
-                        fn advancesParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn advancesParser(ctx: Context, input: []const Item) Error!Result {
                             const res = try parser(ctx, input);
                             if (res.matched() and input.len == res.rest.len) {
                                 res.deinit(ctx);
@@ -618,7 +618,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                 // If we receive a single element list lower it to the first item
                 pub fn lower(parser: Parser) Parser {
                     const shim = struct {
-                        fn lowerParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn lowerParser(ctx: Context, input: []const Item) Error!Result {
                             const res = try parser(ctx, input);
                             if (res.matched()) {
                                 switch (res.tok.ok.value) {
@@ -640,7 +640,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                 pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
                     const upper_complete_parser = left(upper_parser, eof());
                     const shim = struct {
-                        fn refineParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn refineParser(ctx: Context, input: []const Item) Error!Result {
                             const lres = try lower_parser(ctx, input);
                             errdefer lres.deinit(ctx);
 
@@ -664,7 +664,7 @@ pub fn ZpcSpace(comptime Item: type) type {
                 // Call a parser that is pointed to by a field on the context.
                 pub fn recurse(field_name: []const Item) Parser {
                     const shim = struct {
-                        fn recurseParser(ctx: Context, input: []const Item) ZpcError!Result {
+                        fn recurseParser(ctx: Context, input: []const Item) Error!Result {
                             const parser = @field(ctx, field_name);
                             return parser(ctx, input);
                         }
@@ -700,13 +700,13 @@ const TestTag = enum(u8) {
     REST,
 };
 
-const TestSpace = ZpcSpace(u8);
-const TestToken = TestSpace.ZpcToken(TestTag, .run);
-const TestResult = TestSpace.ZpcResult(TestToken);
+const TestSpace = Space(u8);
+const TestToken = TestSpace.TokenType(TestTag, .run);
+const TestResult = TestSpace.ResultType(TestToken);
 
 const TestContext = struct {
     allocator: Allocator,
-    expr: *const TestSpace.ZpcParser(@This(), TestResult) = undefined,
+    expr: *const TestSpace.ParserType(@This(), TestResult) = undefined,
 };
 
 fn checkAndConsume(
@@ -719,7 +719,7 @@ fn checkAndConsume(
 }
 
 test "always" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseAlways = P.always(.FOO, "foo");
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -731,7 +731,7 @@ test "always" {
 }
 
 test "eof" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseEof = P.eof();
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -749,7 +749,7 @@ test "eof" {
 }
 
 test "rest" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseAllDigits = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.rest(),
@@ -767,7 +767,7 @@ test "rest" {
 }
 
 test "keyword" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseHello = P.keyword(.HELLO, "Hello");
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -792,7 +792,7 @@ test "keyword" {
 }
 
 test "takeWhile" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseDigits = P.takeWhile(
         .DIGIT,
         .range(1, 2),
@@ -826,7 +826,7 @@ test "takeWhile" {
 }
 
 test "alt" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseAlt = P.alt(&.{
         P.keyword(.HELLO, "Hello"),
         P.keyword(.FOO, "Foo"),
@@ -856,7 +856,7 @@ test "alt" {
 }
 
 test "seq" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseAlphaNum = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
@@ -877,7 +877,7 @@ test "seq" {
 }
 
 test "left" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseLeft = P.left(
         P.keyword(.FOO, "Foo"),
         P.keyword(.BAR, "Bar"),
@@ -905,7 +905,7 @@ test "left" {
 }
 
 test "right" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseRight = P.right(
         P.keyword(.FOO, "Foo"),
         P.keyword(.BAR, "Bar"),
@@ -933,7 +933,7 @@ test "right" {
 }
 
 test "between" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseBetween = P.between(
         P.literal("("),
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
@@ -961,7 +961,7 @@ test "between" {
 }
 
 test "many" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseFooBar = P.many(
         .MULTI,
         .range(2, 3),
@@ -998,7 +998,7 @@ test "many" {
 }
 
 test "optional" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseMaybeNumber = P.optional(P.takeWhile(
         .DIGIT,
         .oneOrMore,
@@ -1020,7 +1020,7 @@ test "optional" {
 }
 
 test "discard" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseHello = P.discard(P.keyword(.HELLO, "Hello"));
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1039,7 +1039,7 @@ test "discard" {
 }
 
 test "span" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseAlphaNum = P.span(.ALNUM, P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
@@ -1053,7 +1053,7 @@ test "span" {
 }
 
 test "flat" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
     const parseFlat = P.seq(.ARRAY, &.{
         parseDigits,
@@ -1088,7 +1088,7 @@ test "flat" {
 }
 
 test "advances" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
     const parseAdvances = P.advances(parseDigits);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1107,7 +1107,7 @@ test "advances" {
 }
 
 test "lower" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseLower = P.lower(P.many(.MULTI, .oneOrMore, P.keyword(.FOO, "Foo")));
     const parseFlatLower = P.flat(parseLower);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1136,7 +1136,7 @@ test "lower" {
 }
 
 test "refine" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseKeyword = P.refine(
         P.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
         P.alt(&.{
@@ -1166,7 +1166,7 @@ test "refine" {
 }
 
 test "recurse" {
-    const P = TestSpace.Zpc(TestContext, TestTag);
+    const P = TestSpace.Factory(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
     const skipSpace = P.takeWhile(P.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
 
@@ -1233,12 +1233,12 @@ test "recurse" {
     try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
 }
 
-test "ZpcComptime" {
+test "ComptimeFactory" {
     const Context = struct {};
 
     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
 
-    const P = TestSpace.ZpcComptime(Context, Tag);
+    const P = TestSpace.ComptimeFactory(Context, Tag);
     const parseAlphaNum = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),

@@ -6,7 +6,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const zpc = @import("zpc").ZpcSpace(u8);
+const zpc = @import("zpc").Space(u8);
 
 const JsonPathTag = enum(u8) {
     NONE,
@@ -24,7 +24,7 @@ const JsonContext = struct {
     allocator: Allocator,
 };
 
-const P = zpc.Zpc(JsonContext, JsonPathTag);
+const P = zpc.Factory(JsonContext, JsonPathTag);
 
 fn makeJsonPathParser() P.Parser {
     const intParser = P.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);

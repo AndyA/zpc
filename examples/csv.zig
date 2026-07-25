@@ -6,13 +6,13 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const zpc = @import("zpc").ZpcSpace(u8);
+const zpc = @import("zpc").Space(u8);
 
 const CsvTag = enum(u8) { NONE, QUOTED, BARE, ROW, CSV };
 
 const CsvContext = struct { allocator: Allocator };
 
-const P = zpc.Zpc(CsvContext, CsvTag);
+const P = zpc.Factory(CsvContext, CsvTag);
 
 fn makeCsvParser() P.Parser {
     const skipSpace = P.takeWhile(.NONE, .zeroOrMore, zpc.predAnd(
