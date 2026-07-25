@@ -12,76 +12,12 @@ pub const ZpcError = error{OutOfMemory};
 
 pub const ZpcPhase = enum { comp, run };
 
-fn ZpcArrayList(comptime T: type) type {
-    return struct {
-        const Self = @This();
-        pub const empty: Self = .{};
-
-        list: std.ArrayList(T) = .empty,
-
-        pub fn deinit(self: *Self, ctx: anytype) void {
-            self.list.deinit(ctx.allocator);
-        }
-
-        pub fn append(self: *Self, ctx: anytype, item: T) ZpcError!void {
-            try self.list.append(ctx.allocator, item);
-        }
-
-        pub fn appendSlice(self: *Self, ctx: anytype, slice: []const T) ZpcError!void {
-            try self.list.appendSlice(ctx.allocator, slice);
-        }
-
-        pub fn toOwnedSlice(self: *Self, ctx: anytype) ZpcError![]const T {
-            return try self.list.toOwnedSlice(ctx.allocator);
-        }
-
-        pub fn freeList(ctx: anytype, list: []const T) void {
-            ctx.allocator.free(list);
-        }
-
-        pub fn items(self: Self) []const T {
-            return self.list.items;
-        }
-    };
-}
-
-fn ZpcComptimeArrayList(comptime T: type) type {
-    return struct {
-        const Self = @This();
-        pub const empty: Self = .{};
-
-        list: ct.ComptimeArrayList(T) = .empty,
-
-        pub fn deinit(self: *Self, _: anytype) void {
-            self.list.deinit(ct.non_allocator);
-        }
-
-        pub fn append(self: *Self, _: anytype, item: T) ZpcError!void {
-            try self.list.append(ct.non_allocator, item);
-        }
-
-        pub fn appendSlice(self: *Self, _: anytype, slice: []const T) ZpcError!void {
-            try self.list.appendSlice(ct.non_allocator, slice);
-        }
-
-        pub fn toOwnedSlice(self: *Self, _: anytype) ZpcError![]const T {
-            return try self.list.toOwnedSlice(ct.non_allocator);
-        }
-
-        pub fn freeList(_: anytype, _: []const T) void {}
-
-        pub fn items(self: Self) []const T {
-            return self.list.items;
-        }
-    };
-}
-
 pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
     return struct {
         const Self = @This();
         pub const ArrayList = switch (phase) {
-            .comp => ZpcComptimeArrayList(Self),
-            .run => ZpcArrayList(Self),
+            .comp => ct.ComptimeArrayList(Self),
+            .run => std.ArrayList(Self),
         };
         pub const NOP: Tag = @enumFromInt(0);
 
@@ -148,6 +84,20 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
             try (Formatter{ .token = &self }).format(writer);
         }
 
+        fn getAlloc(ctx: anytype) Allocator {
+            return switch (phase) {
+                .comp => ct.non_allocator,
+                .run => ctx.allocator,
+            };
+        }
+
+        fn freeList(ctx: anytype, list: []const Self) void {
+            switch (phase) {
+                .comp => {},
+                .run => ctx.allocator.free(list),
+            }
+        }
+
         pub fn initSlice(tag: Tag, slice: []const u8) Self {
             return .{ .tag = tag, .value = .{ .slice = slice } };
         }
@@ -157,7 +107,7 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
         }
 
         pub fn initArrayList(ctx: anytype, tag: Tag, array: *ArrayList) ZpcError!Self {
-            const list = try array.toOwnedSlice(ctx);
+            const list = try array.toOwnedSlice(getAlloc(ctx));
             return initList(tag, list);
         }
 
@@ -168,10 +118,10 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
         pub fn appendArrayList(self: Self, ctx: anytype, array: *ArrayList) ZpcError!void {
             switch (self.value) {
                 .nothing => {},
-                .slice, .list => try array.append(ctx, self),
+                .slice, .list => try array.append(getAlloc(ctx), self),
                 .flat => |flat| {
                     defer self.deinitShallow(ctx);
-                    try array.appendSlice(ctx, flat);
+                    try array.appendSlice(getAlloc(ctx), flat);
                 },
             }
         }
@@ -185,19 +135,19 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
 
         pub fn deinitShallow(self: Self, ctx: anytype) void {
             switch (self.value) {
-                .list, .flat => |list| ArrayList.freeList(ctx, list),
+                .list, .flat => |list| freeList(ctx, list),
                 .nothing, .slice => {},
             }
         }
 
         pub fn deinitList(list: []const Self, ctx: anytype) void {
             for (list) |item| item.deinit(ctx);
-            ArrayList.freeList(ctx, list);
+            freeList(ctx, list);
         }
 
         pub fn deinitArrayList(list: *ArrayList, ctx: anytype) void {
-            for (list.items()) |item| item.deinit(ctx);
-            list.deinit(ctx);
+            for (list.items) |item| item.deinit(ctx);
+            list.deinit(getAlloc(ctx));
         }
 
         pub fn children(self: Self) []const Self {
@@ -554,10 +504,10 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
                     var list: Token.ArrayList = .empty;
                     errdefer Token.deinitArrayList(&list, ctx);
                     var tail = input;
-                    while (list.items().len < bounds.max) {
+                    while (list.items.len < bounds.max) {
                         const res = try parser(ctx, tail);
                         if (!res.matched()) {
-                            if (list.items().len >= bounds.min)
+                            if (list.items.len >= bounds.min)
                                 break;
                             Token.deinitArrayList(&list, ctx);
                             return .initFail(res.tok.fail, input);
