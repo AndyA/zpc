@@ -347,17 +347,17 @@ pub fn Space(comptime Item: type) type {
             return ParserType(Context, ResultType(TokenType(Tag, phase)));
         }
 
-        pub fn Factory(comptime Context: type, comptime Tag: type) type {
+        pub fn Parsers(comptime Context: type, comptime Tag: type) type {
             if (!@hasField(Context, "allocator"))
                 @compileError("Context must have an allocator field");
-            return makeFactory(Context, Tag, .run);
+            return makeParsers(Context, Tag, .run);
         }
 
-        pub fn ComptimeFactory(comptime Context: type, comptime Tag: type) type {
-            return makeFactory(Context, Tag, .comp);
+        pub fn ComptimeParsers(comptime Context: type, comptime Tag: type) type {
+            return makeParsers(Context, Tag, .comp);
         }
 
-        fn makeFactory(comptime Context: type, comptime Tag: type, phase: Phase) type {
+        fn makeParsers(comptime Context: type, comptime Tag: type, phase: Phase) type {
             return struct {
                 pub const Token = TokenType(Tag, phase);
                 pub const Result = ResultType(Token);
@@ -719,7 +719,7 @@ fn checkAndConsume(
 }
 
 test "always" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlways = P.always(.FOO, "foo");
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -731,7 +731,7 @@ test "always" {
 }
 
 test "eof" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseEof = P.eof();
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -749,7 +749,7 @@ test "eof" {
 }
 
 test "rest" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAllDigits = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.rest(),
@@ -767,7 +767,7 @@ test "rest" {
 }
 
 test "keyword" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseHello = P.keyword(.HELLO, "Hello");
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -792,7 +792,7 @@ test "keyword" {
 }
 
 test "takeWhile" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(
         .DIGIT,
         .range(1, 2),
@@ -826,7 +826,7 @@ test "takeWhile" {
 }
 
 test "alt" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlt = P.alt(&.{
         P.keyword(.HELLO, "Hello"),
         P.keyword(.FOO, "Foo"),
@@ -856,7 +856,7 @@ test "alt" {
 }
 
 test "seq" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlphaNum = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
@@ -877,7 +877,7 @@ test "seq" {
 }
 
 test "left" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseLeft = P.left(
         P.keyword(.FOO, "Foo"),
         P.keyword(.BAR, "Bar"),
@@ -905,7 +905,7 @@ test "left" {
 }
 
 test "right" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseRight = P.right(
         P.keyword(.FOO, "Foo"),
         P.keyword(.BAR, "Bar"),
@@ -933,7 +933,7 @@ test "right" {
 }
 
 test "between" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseBetween = P.between(
         P.literal("("),
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
@@ -961,7 +961,7 @@ test "between" {
 }
 
 test "many" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseFooBar = P.many(
         .MULTI,
         .range(2, 3),
@@ -998,7 +998,7 @@ test "many" {
 }
 
 test "optional" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseMaybeNumber = P.optional(P.takeWhile(
         .DIGIT,
         .oneOrMore,
@@ -1020,7 +1020,7 @@ test "optional" {
 }
 
 test "discard" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseHello = P.discard(P.keyword(.HELLO, "Hello"));
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1039,7 +1039,7 @@ test "discard" {
 }
 
 test "span" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlphaNum = P.span(.ALNUM, P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
@@ -1053,7 +1053,7 @@ test "span" {
 }
 
 test "flat" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
     const parseFlat = P.seq(.ARRAY, &.{
         parseDigits,
@@ -1088,7 +1088,7 @@ test "flat" {
 }
 
 test "advances" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
     const parseAdvances = P.advances(parseDigits);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1107,7 +1107,7 @@ test "advances" {
 }
 
 test "lower" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseLower = P.lower(P.many(.MULTI, .oneOrMore, P.keyword(.FOO, "Foo")));
     const parseFlatLower = P.flat(parseLower);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1136,7 +1136,7 @@ test "lower" {
 }
 
 test "refine" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseKeyword = P.refine(
         P.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
         P.alt(&.{
@@ -1166,7 +1166,7 @@ test "refine" {
 }
 
 test "recurse" {
-    const P = TestSpace.Factory(TestContext, TestTag);
+    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
     const skipSpace = P.takeWhile(P.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
 
@@ -1233,12 +1233,12 @@ test "recurse" {
     try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
 }
 
-test "ComptimeFactory" {
+test "ComptimeParsers" {
     const Context = struct {};
 
     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
 
-    const P = TestSpace.ComptimeFactory(Context, Tag);
+    const P = TestSpace.ComptimeParsers(Context, Tag);
     const parseAlphaNum = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),

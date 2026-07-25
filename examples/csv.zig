@@ -12,7 +12,7 @@ const CsvTag = enum(u8) { NONE, QUOTED, BARE, ROW, CSV };
 
 const CsvContext = struct { allocator: Allocator };
 
-const P = zpc.Factory(CsvContext, CsvTag);
+const P = zpc.Parsers(CsvContext, CsvTag);
 
 fn makeCsvParser() P.Parser {
     const skipSpace = P.takeWhile(.NONE, .zeroOrMore, zpc.predAnd(

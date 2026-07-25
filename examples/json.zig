@@ -25,7 +25,7 @@ const JsonContext = struct {
     jsonParser: *const zpc.ParserTypeForTag(@This(), JsonTag, .run),
 };
 
-const P = zpc.Factory(JsonContext, JsonTag);
+const P = zpc.Parsers(JsonContext, JsonTag);
 const skipSpace = P.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
 
 fn makeListParser(

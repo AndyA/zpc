@@ -36,7 +36,7 @@ const Context = struct {
     expr: *const zpc.ParserTypeForTag(@This(), Tag, .run),
 };
 
-const P = zpc.Factory(Context, Tag);
+const P = zpc.Parsers(Context, Tag);
 
 const skipSpace = P.takeWhile(.N, .zeroOrMore, std.ascii.isWhitespace);
 
