@@ -66,7 +66,7 @@ fn makeJsonPathParser() P.Parser {
     });
 
     const segmentParser = P.alt(&.{
-        // ..foo    SEGMENT(SEARCH, IDENT)
+        // ..foo    SEGMENT(SEARCH, IDENT | WILD)
         // ..[sub]  SEGMENT(SEARCH, NUMBER | STRING | WILD)
         P.seq(.SEGMENT, &.{ P.keyword(.SEARCH, ".."), refParser }),
         // .foo     SEGMENT(SUBSCRIPT, IDENT)
