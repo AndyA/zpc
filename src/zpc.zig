@@ -335,12 +335,12 @@ pub fn Space(Item: type) type {
             return fn (ctx: Context, input: []const Item) Error!Result;
         }
 
-        pub fn MapperType(Context: type, Result: type) type {
-            return fn (ctx: Context, input: []const Item, result: Result) Error!Result;
-        }
-
         pub fn ParserTypeForTag(Context: type, Tag: type, phase: Phase) type {
             return ParserType(Context, ResultType(TokenType(Tag, phase)));
+        }
+
+        pub fn MapperType(Context: type, Result: type) type {
+            return fn (ctx: Context, input: []const Item, result: Result) Error!Result;
         }
 
         pub fn Parsers(Context: type, Tag: type) type {
