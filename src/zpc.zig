@@ -533,32 +533,51 @@ fn make_zpc(comptime Context: type, comptime Tag: type, phase: ZpcPhase) type {
         }
 
         pub fn discard(parser: Parser) Parser {
-            const shim = struct {
-                fn discardParser(ctx: Context, input: []const u8) ZpcError!Result {
-                    var arena = std.heap.ArenaAllocator.init(ctx.allocator); // TODO
-                    defer arena.deinit();
-                    var tmp_ctx: Context = ctx;
-                    tmp_ctx.allocator = arena.allocator();
-                    const res = try parser(tmp_ctx, input);
-                    if (!res.matched()) return .initFail(res.tok.fail, input);
-                    return .initOk(.nothing, res.rest);
-                }
+            const shim = switch (phase) {
+                .comp => struct {
+                    fn discardParser(ctx: Context, input: []const u8) ZpcError!Result {
+                        const res = try parser(ctx, input);
+                        if (!res.matched()) return .initFail(res.tok.fail, input);
+                        return .initOk(.nothing, res.rest);
+                    }
+                },
+                .run => struct {
+                    fn discardParser(ctx: Context, input: []const u8) ZpcError!Result {
+                        var arena = std.heap.ArenaAllocator.init(ctx.allocator);
+                        defer arena.deinit();
+                        var tmp_ctx: Context = ctx;
+                        tmp_ctx.allocator = arena.allocator();
+                        const res = try parser(tmp_ctx, input);
+                        if (!res.matched()) return .initFail(res.tok.fail, input);
+                        return .initOk(.nothing, res.rest);
+                    }
+                },
             };
             return shim.discardParser;
         }
 
         pub fn span(tag: Tag, parser: Parser) Parser {
-            const shim = struct {
-                fn matchParser(ctx: Context, input: []const u8) ZpcError!Result {
-                    var arena = std.heap.ArenaAllocator.init(ctx.allocator);
-                    defer arena.deinit();
-                    var tmp_ctx: Context = ctx;
-                    tmp_ctx.allocator = arena.allocator();
-                    const res = try parser(tmp_ctx, input);
-                    if (!res.matched()) return .initFail(res.tok.fail, input);
-                    const consumed: usize = input.len - res.rest.len;
-                    return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
-                }
+            const shim = switch (phase) {
+                .comp => struct {
+                    fn matchParser(ctx: Context, input: []const u8) ZpcError!Result {
+                        const res = try parser(ctx, input);
+                        if (!res.matched()) return .initFail(res.tok.fail, input);
+                        const consumed: usize = input.len - res.rest.len;
+                        return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
+                    }
+                },
+                .run => struct {
+                    fn matchParser(ctx: Context, input: []const u8) ZpcError!Result {
+                        var arena = std.heap.ArenaAllocator.init(ctx.allocator);
+                        defer arena.deinit();
+                        var tmp_ctx: Context = ctx;
+                        tmp_ctx.allocator = arena.allocator();
+                        const res = try parser(tmp_ctx, input);
+                        if (!res.matched()) return .initFail(res.tok.fail, input);
+                        const consumed: usize = input.len - res.rest.len;
+                        return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
+                    }
+                },
             };
             return shim.matchParser;
         }
