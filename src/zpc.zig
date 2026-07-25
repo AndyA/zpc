@@ -350,14 +350,14 @@ pub fn Space(comptime Item: type) type {
         pub fn Factory(comptime Context: type, comptime Tag: type) type {
             if (!@hasField(Context, "allocator"))
                 @compileError("Context must have an allocator field");
-            return make_factory(Context, Tag, .run);
+            return makeFactory(Context, Tag, .run);
         }
 
         pub fn ComptimeFactory(comptime Context: type, comptime Tag: type) type {
-            return make_factory(Context, Tag, .comp);
+            return makeFactory(Context, Tag, .comp);
         }
 
-        fn make_factory(comptime Context: type, comptime Tag: type, phase: Phase) type {
+        fn makeFactory(comptime Context: type, comptime Tag: type, phase: Phase) type {
             return struct {
                 pub const Token = TokenType(Tag, phase);
                 pub const Result = ResultType(Token);
