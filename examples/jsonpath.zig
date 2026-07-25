@@ -6,7 +6,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const zpc = @import("zpc");
+const zpc = @import("zpc").ZpcSpace(u8);
 
 const JsonPathTag = enum(u8) {
     NONE,
