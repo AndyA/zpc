@@ -20,11 +20,11 @@ const JsonPathTag = enum(u8) {
     WILD,
 };
 
-const JsonContext = struct {
+const JsonPathContext = struct {
     allocator: Allocator,
 };
 
-const P = zpc.Parsers(JsonContext, JsonPathTag);
+const P = zpc.Parsers(JsonPathContext, JsonPathTag);
 
 fn makeJsonPathParser() P.Parser {
     const intParser = P.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);
@@ -85,7 +85,7 @@ fn makeJsonPathParser() P.Parser {
 
 pub fn main(init: std.process.Init) !void {
     const jsonPathParser = makeJsonPathParser();
-    const ctx: JsonContext = .{ .allocator = init.gpa };
+    const ctx: JsonPathContext = .{ .allocator = init.gpa };
 
     const paths: []const []const u8 = &.{
         \\$[0].$foo["\""].[*]..$.*
