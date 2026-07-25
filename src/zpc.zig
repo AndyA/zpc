@@ -232,7 +232,6 @@ pub fn ZpcToken(comptime Tag: type, comptime phase: ZpcPhase) type {
 pub fn ZpcResult(comptime Token: type) type {
     return struct {
         const Self = @This();
-        // const Token = ZpcToken(Tag, .run);
 
         pub const Formatter = struct {
             token: *const Self,
@@ -271,6 +270,7 @@ pub fn ZpcResult(comptime Token: type) type {
             /// The point at which parsing failed
             fail: []const u8,
         },
+        /// The rest of the input
         rest: []const u8,
 
         pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
