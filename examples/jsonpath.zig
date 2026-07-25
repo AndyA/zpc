@@ -43,9 +43,11 @@ fn makeJsonPathParser() P.Parser {
         P.literal("\""),
     );
 
+    const wildParser = P.keyword(.WILD, "*");
+
     const subscriptParser = P.between(
         P.literal("["),
-        P.alt(&.{ P.keyword(.WILD, "*"), stringParser, intParser }),
+        P.alt(&.{ wildParser, stringParser, intParser }),
         P.literal("]"),
     );
 
@@ -60,7 +62,7 @@ fn makeJsonPathParser() P.Parser {
     const refParser = P.alt(&.{
         subscriptParser,
         identParser,
-        P.keyword(.WILD, "*"),
+        wildParser,
     });
 
     const segmentParser = P.alt(&.{
