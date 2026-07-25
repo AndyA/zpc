@@ -69,7 +69,7 @@ fn makeJsonPathParser() P.Parser {
         // ..foo    SEGMENT(SEARCH, IDENT | WILD)
         // ..[sub]  SEGMENT(SEARCH, NUMBER | STRING | WILD)
         P.seq(.SEGMENT, &.{ P.keyword(.SEARCH, ".."), refParser }),
-        // .foo     SEGMENT(SUBSCRIPT, IDENT)
+        // .foo     SEGMENT(SUBSCRIPT, IDENT | WILD)
         // .[sub]   SEGMENT(SUBSCRIPT, NUMBER | STRING | WILD)
         P.seq(.SEGMENT, &.{ P.keyword(.SUBSCRIPT, "."), refParser }),
         // [sub]    SEGMENT(SUBSCRIPT, NUMBER | STRING | WILD)
