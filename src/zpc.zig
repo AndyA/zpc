@@ -193,7 +193,7 @@ pub fn Space(Item: type) type {
                     return self.value == .nothing;
                 }
 
-                pub fn appendArrayList(self: Self, ctx: anytype, array: *ArrayList) Error!void {
+                pub fn appendToArrayList(self: Self, ctx: anytype, array: *ArrayList) Error!void {
                     switch (self.value) {
                         .nothing => {},
                         .slice, .list => try array.append(getAlloc(ctx), self),
@@ -460,7 +460,7 @@ pub fn Space(Item: type) type {
                                     return .initFail(res.tok.fail, input);
                                 }
                                 tail = res.rest;
-                                try res.tok.ok.appendArrayList(ctx, &list);
+                                try res.tok.ok.appendToArrayList(ctx, &list);
                             }
 
                             return .initOk(try .initArrayList(ctx, tag, &list), tail);
@@ -521,7 +521,7 @@ pub fn Space(Item: type) type {
                                     return .initFail(res.tok.fail, input);
                                 }
                                 tail = res.rest;
-                                try res.tok.ok.appendArrayList(ctx, &list);
+                                try res.tok.ok.appendToArrayList(ctx, &list);
                             }
                             return .initOk(try .initArrayList(ctx, tag, &list), tail);
                         }
