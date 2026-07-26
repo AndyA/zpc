@@ -364,7 +364,8 @@ pub fn Space(Item: type) type {
                     assert(str.len != 0);
                     const shim = struct {
                         fn keywordParser(_: Context, input: []const Item) Error!Result {
-                            if (input.len >= str.len and std.mem.eql(Item, input[0..str.len], str))
+                            if (input.len >= str.len and
+                                std.mem.eql(Item, input[0..str.len], str))
                                 return .initOk(.initSlice(tag, str), input[str.len..]);
                             return .initFailHere(input);
                         }
@@ -396,10 +397,10 @@ pub fn Space(Item: type) type {
                     return shim.eofParser;
                 }
 
-                pub fn rest() Parser {
+                pub fn rest(tag: Tag) Parser {
                     const shim = struct {
                         fn restParser(_: Context, input: []const Item) Error!Result {
-                            return .initOk(.initSlice(Token.NOP, input), "");
+                            return .initOk(.initSlice(tag, input), "");
                         }
                     };
                     return shim.restParser;
@@ -756,14 +757,14 @@ test "rest" {
     const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAllDigits = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        P.rest(),
+        P.rest(.REST),
     });
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
     try checkAndConsume(
         ctx,
         .initOk(.initList(.MULTI, &.{
             .initSlice(.DIGIT, "123"),
-            .initSlice(P.Token.NOP, "ABC."),
+            .initSlice(.REST, "ABC."),
         }), ""),
 
         try parseAllDigits(ctx, "123ABC."),
