@@ -33,7 +33,7 @@ const Tag = enum(u8) {
 
 const Context = struct {
     allocator: Allocator,
-    expr: *const zpc.ParserTypeForTag(@This(), Tag, .run),
+    expr: *const zpc.ParserType(@This(), Tag),
 };
 
 const P = zpc.Parsers(Context, Tag);

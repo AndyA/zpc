@@ -22,7 +22,7 @@ const JsonTag = enum(u8) {
 
 const JsonContext = struct {
     allocator: Allocator,
-    jsonParser: *const zpc.ParserTypeForTag(@This(), JsonTag, .run),
+    jsonParser: *const zpc.ParserType(@This(), JsonTag),
 };
 
 const P = zpc.Parsers(JsonContext, JsonTag);

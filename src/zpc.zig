@@ -331,12 +331,16 @@ pub fn Space(Item: type) type {
             };
         }
 
-        pub fn ParserType(Context: type, Result: type) type {
+        pub fn ParserTypeForResult(Context: type, Result: type) type {
             return fn (ctx: Context, input: []const Item) Error!Result;
         }
 
-        pub fn ParserTypeForTag(Context: type, Tag: type, phase: Phase) type {
-            return ParserType(Context, ResultType(TokenType(Tag, phase)));
+        pub fn ParserType(Context: type, Tag: type) type {
+            return ParserTypeForResult(Context, ResultType(TokenType(Tag, .run)));
+        }
+
+        pub fn ComptimeParserType(Context: type, Tag: type) type {
+            return ParserTypeForResult(Context, ResultType(TokenType(Tag, .comp)));
         }
 
         pub fn MapperType(Context: type, Result: type) type {
@@ -357,7 +361,7 @@ pub fn Space(Item: type) type {
             return struct {
                 pub const Token = TokenType(Tag, phase);
                 pub const Result = ResultType(Token);
-                pub const Parser = ParserType(Context, Result);
+                pub const Parser = ParserTypeForResult(Context, Result);
                 pub const Mapper = MapperType(Context, Result);
 
                 pub fn keyword(tag: Tag, str: []const Item) Parser {
@@ -711,7 +715,7 @@ const TestResult = TestSpace.ResultType(TestToken);
 
 const TestContext = struct {
     allocator: Allocator,
-    expr: *const TestSpace.ParserType(@This(), TestResult) = undefined,
+    expr: *const TestSpace.ParserTypeForResult(@This(), TestResult) = undefined,
 };
 
 fn checkAndConsume(
