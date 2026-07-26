@@ -189,10 +189,6 @@ pub fn Space(Item: type) type {
                     return initList(tag, list);
                 }
 
-                pub fn isNothing(self: Self) bool {
-                    return self.value == .nothing;
-                }
-
                 pub fn appendToArrayList(self: Self, ctx: anytype, array: *ArrayList) Error!void {
                     switch (self.value) {
                         .nothing => {},
