@@ -26,6 +26,16 @@ pub fn build(b: *std.Build) void {
     const run_mod_tests = b.addRunArtifact(mod_tests);
     test_step.dependOn(&run_mod_tests.step);
 
+    const coverage = b.option(bool, "coverage", "Enable zig-cov") orelse false;
+    const rt_path = b.option([]const u8, "coverage-rt", "zig-cov-rt path") orelse null;
+
+    if (coverage) {
+        mod_tests.use_llvm = true;
+        mod_tests.sanitize_coverage_trace_pc_guard = true;
+        mod_tests.root_module.link_libc = true;
+        if (rt_path) |p| mod_tests.root_module.addObjectFile(.{ .cwd_relative = p });
+    }
+
     inline for (examples) |example| {
         const exe = b.addExecutable(.{
             .name = example,
