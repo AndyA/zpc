@@ -373,6 +373,10 @@ pub fn Space(Item: type) type {
                     return shim.keywordParser;
                 }
 
+                pub fn tagName(tag: Tag) Parser {
+                    return keyword(tag, @tagName(tag));
+                }
+
                 pub fn literal(str: []const Item) Parser {
                     return keyword(Token.NOP, str);
                 }
@@ -793,6 +797,19 @@ test "keyword" {
         ctx,
         .initFailHere("Hell or bust"),
         try parseHello(ctx, "Hell or bust"),
+    );
+}
+
+test "tagName" {
+    const P = TestSpace.Parsers(TestContext, TestTag);
+    const parseHello = P.tagName(.HELLO);
+
+    const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+    try checkAndConsume(
+        ctx,
+        .initOk(.initSlice(.HELLO, "HELLO"), ", WORLD"),
+        try parseHello(ctx, "HELLO, WORLD"),
     );
 }
 
