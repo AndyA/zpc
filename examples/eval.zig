@@ -76,8 +76,15 @@ fn makeExpressionParser() P.Parser {
         atomParser,
     });
 
-    const mulDivParser = makeBinOpParser(unaryParser, P.alt(&.{ t(.@"*"), t(.@"/"), t(.@"%") }));
-    const addSubParser = makeBinOpParser(mulDivParser, P.alt(&.{ t(.@"+"), t(.@"-") }));
+    const mulDivParser = makeBinOpParser(
+        unaryParser,
+        P.alt(&.{ t(.@"*"), t(.@"/"), t(.@"%") }),
+    );
+
+    const addSubParser = makeBinOpParser(
+        mulDivParser,
+        P.alt(&.{ t(.@"+"), t(.@"-") }),
+    );
 
     const cmpParser = makeBinOpParser(addSubParser, P.alt(&.{
         t(.@"!="),
