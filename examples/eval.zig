@@ -10,6 +10,7 @@ const zpc = @import("zpc").Space(u8);
 
 const Tag = enum(u8) {
     N, // means don't care - but `N` is shorter
+    IDENT,
     INT,
     UNOPS,
     UNOP,
@@ -51,9 +52,18 @@ fn makeBinOpParser(valueParser: P.Parser, opParser: P.Parser) P.Parser {
 fn makeExpressionParser() P.Parser {
     const intParser = P.takeWhile(.INT, .oneOrMore, std.ascii.isDigit);
 
+    const identFirstPred = zpc.predOr(std.ascii.isAlphabetic, zpc.predEqual('_'));
+    const identRestPred = zpc.predOr(identFirstPred, std.ascii.isDigit);
+
+    const identParser = P.span(.IDENT, P.left(
+        P.takeWhile(.N, .one, identFirstPred),
+        P.takeWhile(.N, .zeroOrMore, identRestPred),
+    ));
+
     const atomParser = P.right(skipSpace, P.alt(&.{
         P.between(P.literal("("), P.recurse("expr"), P.right(skipSpace, P.literal(")"))),
         intParser,
+        identParser,
     }));
 
     const unaryParser = P.alt(&.{
@@ -136,6 +146,7 @@ fn eval(token: P.Token) !i64 {
             }
             break :eval res;
         },
+        .IDENT => 0,
         else => unreachable,
     };
 }
@@ -148,7 +159,7 @@ pub fn main(init: std.process.Init) !void {
     const expressions: []const []const u8 = &.{
         "-1 + 3",
         "--(100 + 2 - 9) / 3 - ~10",
-        "(3 < 4) + 7",
+        "(3 < 4) + 7 - foo + 6",
     };
 
     for (expressions) |path| {
