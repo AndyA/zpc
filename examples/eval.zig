@@ -50,6 +50,8 @@ fn makeBinOpParser(valueParser: P.Parser, opParser: P.Parser) P.Parser {
 }
 
 fn makeExpressionParser() P.Parser {
+    const k = P.keyword;
+    const t = P.tagName;
     const intParser = P.takeWhile(.INT, .oneOrMore, std.ascii.isDigit);
 
     const identFirstPred = zpc.predOr(std.ascii.isAlphabetic, zpc.predEqual('_'));
@@ -67,37 +69,25 @@ fn makeExpressionParser() P.Parser {
     }));
 
     const unaryParser = P.alt(&.{
-        P.seq(.UNOP, &.{
-            P.many(.UNOPS, .oneOrMore, P.right(skipSpace, P.alt(&.{
-                P.keyword(.NEG, "-"),
-                P.tagName(.@"~"),
-                P.tagName(.@"!"),
-            }))),
-            atomParser,
-        }),
+        P.seq(.UNOP, &.{ P.many(.UNOPS, .oneOrMore, P.right(
+            skipSpace,
+            P.alt(&.{ k(.NEG, "-"), t(.@"~"), t(.@"!") }),
+        )), atomParser }),
         atomParser,
     });
 
-    const mulDivParser = makeBinOpParser(unaryParser, P.alt(&.{
-        P.tagName(.@"*"),
-        P.tagName(.@"/"),
-        P.tagName(.@"%"),
-    }));
-
-    const addSubParser = makeBinOpParser(mulDivParser, P.alt(&.{
-        P.tagName(.@"+"),
-        P.tagName(.@"-"),
-    }));
+    const mulDivParser = makeBinOpParser(unaryParser, P.alt(&.{ t(.@"*"), t(.@"/"), t(.@"%") }));
+    const addSubParser = makeBinOpParser(mulDivParser, P.alt(&.{ t(.@"+"), t(.@"-") }));
 
     const cmpParser = makeBinOpParser(addSubParser, P.alt(&.{
-        P.tagName(.@"!="),
-        P.keyword(.@"!=", "<>"),
-        P.tagName(.@"<="),
-        P.tagName(.@">="),
-        P.tagName(.@"<"),
-        P.tagName(.@">"),
-        P.tagName(.@"=="),
-        P.keyword(.@"==", "="),
+        t(.@"!="),
+        k(.@"!=", "<>"),
+        t(.@"<="),
+        t(.@">="),
+        t(.@"<"),
+        t(.@">"),
+        t(.@"=="),
+        k(.@"==", "="),
     }));
 
     return cmpParser;
