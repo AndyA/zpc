@@ -16,19 +16,19 @@ const Tag = enum(u8) {
     BINOPS,
     BINOP,
     NEG,
-    FLIP,
-    NOT,
-    MUL,
-    DIV,
-    MOD,
-    ADD,
-    SUB,
-    LT,
-    LTE,
-    GT,
-    GTE,
-    EQ,
-    NE,
+    @"~",
+    @"!",
+    @"*",
+    @"/",
+    @"%",
+    @"+",
+    @"-",
+    @"<",
+    @"<=",
+    @">",
+    @">=",
+    @"==",
+    @"!=",
 };
 
 const Context = struct {
@@ -60,8 +60,8 @@ fn makeExpressionParser() P.Parser {
         P.seq(.UNOP, &.{
             P.many(.UNOPS, .oneOrMore, P.right(skipSpace, P.alt(&.{
                 P.keyword(.NEG, "-"),
-                P.keyword(.FLIP, "~"),
-                P.keyword(.NOT, "!"),
+                P.tagName(.@"~"),
+                P.tagName(.@"!"),
             }))),
             atomParser,
         }),
@@ -69,25 +69,25 @@ fn makeExpressionParser() P.Parser {
     });
 
     const mulDivParser = makeBinOpParser(unaryParser, P.alt(&.{
-        P.keyword(.MUL, "*"),
-        P.keyword(.DIV, "/"),
-        P.keyword(.MOD, "%"),
+        P.tagName(.@"*"),
+        P.tagName(.@"/"),
+        P.tagName(.@"%"),
     }));
 
     const addSubParser = makeBinOpParser(mulDivParser, P.alt(&.{
-        P.keyword(.ADD, "+"),
-        P.keyword(.SUB, "-"),
+        P.tagName(.@"+"),
+        P.tagName(.@"-"),
     }));
 
     const cmpParser = makeBinOpParser(addSubParser, P.alt(&.{
-        P.keyword(.NE, "!="),
-        P.keyword(.NE, "<>"),
-        P.keyword(.LTE, "<="),
-        P.keyword(.GTE, ">="),
-        P.keyword(.LT, "<"),
-        P.keyword(.GT, ">"),
-        P.keyword(.EQ, "=="),
-        P.keyword(.EQ, "="),
+        P.tagName(.@"!="),
+        P.keyword(.@"!=", "<>"),
+        P.tagName(.@"<="),
+        P.tagName(.@">="),
+        P.tagName(.@"<"),
+        P.tagName(.@">"),
+        P.tagName(.@"=="),
+        P.keyword(.@"==", "="),
     }));
 
     return cmpParser;
@@ -108,8 +108,8 @@ fn eval(token: P.Token) !i64 {
             for (0..kids.len) |i|
                 res = switch (kids[kids.len - 1 - i].tag) {
                     .NEG => -res,
-                    .FLIP => ~res,
-                    .NOT => if (res != 0) 0 else 1,
+                    .@"~" => ~res,
+                    .@"!" => if (res != 0) 0 else 1,
                     else => unreachable,
                 };
             break :eval res;
@@ -120,17 +120,17 @@ fn eval(token: P.Token) !i64 {
                 assert(op.tag == .BINOP);
                 const rhs = try eval(op.other());
                 res = switch (op.head().tag) {
-                    .ADD => res + rhs,
-                    .SUB => res - rhs,
-                    .MUL => res * rhs,
-                    .DIV => @divTrunc(res, rhs),
-                    .MOD => @mod(res, rhs),
-                    .LTE => boolInt(res <= rhs),
-                    .LT => boolInt(res < rhs),
-                    .GTE => boolInt(res > rhs),
-                    .GT => boolInt(res > rhs),
-                    .EQ => boolInt(res == rhs),
-                    .NE => boolInt(res != rhs),
+                    .@"+" => res + rhs,
+                    .@"-" => res - rhs,
+                    .@"*" => res * rhs,
+                    .@"/" => @divTrunc(res, rhs),
+                    .@"%" => @mod(res, rhs),
+                    .@"<=" => boolInt(res <= rhs),
+                    .@"<" => boolInt(res < rhs),
+                    .@">=" => boolInt(res > rhs),
+                    .@">" => boolInt(res > rhs),
+                    .@"==" => boolInt(res == rhs),
+                    .@"!=" => boolInt(res != rhs),
                     else => unreachable,
                 };
             }
