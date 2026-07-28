@@ -626,7 +626,7 @@ pub fn Space(Item: type) type {
 
                 /// If `parser` succeeds, discard its result and return a `.nothing` token
                 /// in its place. At any level of nesting other than the root of the AST
-                /// `.nothing` tokens are discarded and won't appear in the top level result.
+                /// `.nothing` tokens are discarded and won't appear in the result.
                 pub fn discard(parser: Parser) Parser {
                     const shim = struct {
                         fn disardMapper(
@@ -661,7 +661,7 @@ pub fn Space(Item: type) type {
                     return mapTemp(parser, shim.spanMapper);
                 }
 
-                /// If parser returns a `.list` modify it so that it will flatten into the
+                /// If `parser` returns a `.list` modify it so that it will flatten into the
                 /// parent token.
                 pub fn flat(parser: Parser) Parser {
                     const shim = struct {
