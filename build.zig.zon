@@ -1,7 +1,7 @@
 .{
-    .name = .zig_parsec,
+    .name = .zpc,
     .version = "0.0.0",
-    .fingerprint = 0x9523806bdb2c23f,
+    .fingerprint = 0x5da37d803b4da804,
     .minimum_zig_version = "0.17.0-dev.1158+1d1193aa7",
     .dependencies = .{},
     .paths = .{
