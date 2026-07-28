@@ -156,7 +156,7 @@ pub fn main(init: std.process.Init) !void {
     const expressions: []const []const u8 = &.{
         "-1 + 3",
         "--(100 + 2 - 9) / 3 - ~10",
-        "(3 < 4) + 7 - foo + 6",
+        "(3 < 4 - q) + 7 - foo + 6",
     };
 
     for (expressions) |path| {
