@@ -1,3 +1,8 @@
+//! A construction kit for parsers that are constructed at comptime and may be
+//! called at runtime or comptime.
+//!
+//! [More](#zpc.Space.makeParsers)
+
 const std = @import("std");
 const print = std.debug.print;
 const assert = std.debug.assert;
@@ -8,30 +13,60 @@ const Allocator = std.mem.Allocator;
 
 const ct = @import("comptime.zig");
 
+/// Quantify the number of times a match may repeat. Useful constants:
+///
+/// * .zeroOrMore
+/// * .zeroOrOne
+/// * .oneOrMore
+/// * .one
+///
 pub const Quantifier = struct {
     const Self = @This();
+    /// Match zero or more times (*)
     pub const zeroOrMore: Self = .{};
+    /// Match zero or one times (?)
     pub const zeroOrOne: Self = .{ .max = 1 };
+    /// Match one or more times (+)
     pub const oneOrMore: Self = .{ .min = 1 };
+    /// Match exactly once
     pub const one: Self = exactly(1);
 
+    /// Match between `min` and `max` times (inclusive)
     pub fn range(min: usize, max: usize) Self {
         assert(min <= max);
         return .{ .min = min, .max = max };
     }
 
+    /// Match exactly `n` times
     pub fn exactly(n: usize) Self {
         return range(n, n);
     }
 
+    /// The minimum number of times to match
     min: usize = 0,
+    /// The maximum number of times to match
     max: usize = std.math.maxInt(usize),
 };
 
+/// Although it's common to parse slices of `u8`, parsers can be constructed for any
+/// suitable scalar type. Common examples include `u21` for Unicode code points, `u16`
+/// for utc-2 / utf-16. Any type for which `==` equality works should be fine.
+///
+/// You can choose the character type at import:
+///
+/// ```zig
+/// const zpc = @import("zpc").Space(u8);
+/// ```
+/// or
+/// ```zig
+/// const zpc = @import("zpc").Space(u21);
+/// ```
+///
 pub fn Space(Item: type) type {
     return struct {
         pub const Predicate = fn (item: Item) bool;
 
+        /// A predicate that matches any item
         pub fn predAny() Predicate {
             const shim = struct {
                 fn pred(_: Item) bool {
@@ -41,6 +76,8 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
+        /// A predicate that is the (short circuited) AND of two other
+        /// predicates
         pub fn predAnd(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
                 fn pred(item: Item) bool {
@@ -50,6 +87,8 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
+        /// A predicate that is the (short circuited) OR of two other
+        /// predicates
         pub fn predOr(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
                 fn pred(item: Item) bool {
@@ -59,6 +98,7 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
+        /// A predicate that negates the supplied predicate
         pub fn predNot(p: Predicate) Predicate {
             const shim = struct {
                 fn pred(item: Item) bool {
@@ -68,6 +108,7 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
+        /// A predicate that is true if the item equals the specified value
         pub fn predEqual(want: Item) Predicate {
             const shim = struct {
                 fn pred(item: Item) bool {
@@ -77,6 +118,8 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
+        /// A predicate that tests whether the item is contained in the specified
+        /// charset.
         pub fn predSet(charset: []const Item) Predicate {
             const shim = struct {
                 fn pred(item: Item) bool {
@@ -86,11 +129,11 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
-        pub const Error = error{OutOfMemory};
+        const Error = error{OutOfMemory};
 
-        pub const Phase = enum { comp, run };
+        const Phase = enum { comp, run };
 
-        pub fn TokenType(Tag: type, phase: Phase) type {
+        fn TokenType(Tag: type, phase: Phase) type {
             return struct {
                 const Self = @This();
                 pub const ArrayList = switch (phase) {
@@ -247,7 +290,7 @@ pub fn Space(Item: type) type {
             };
         }
 
-        pub fn ResultType(Token: type) type {
+        fn ResultType(Token: type) type {
             return struct {
                 const Self = @This();
 
@@ -327,7 +370,7 @@ pub fn Space(Item: type) type {
             };
         }
 
-        pub fn ParserTypeForResult(Context: type, Result: type) type {
+        fn ParserTypeForResult(Context: type, Result: type) type {
             return fn (ctx: Context, input: []const Item) Error!Result;
         }
 
@@ -339,8 +382,16 @@ pub fn Space(Item: type) type {
             return ParserTypeForResult(Context, ResultType(TokenType(Tag, .comp)));
         }
 
-        pub fn MapperType(Context: type, Result: type) type {
+        fn MapperTypeForResult(Context: type, Result: type) type {
             return fn (ctx: Context, input: []const Item, result: Result) Error!Result;
+        }
+
+        pub fn MapperType(Context: type, Tag: type) type {
+            return MapperTypeForResult(Context, ResultType(TokenType(Tag, .run)));
+        }
+
+        pub fn ComptimeMapperType(Context: type, Tag: type) type {
+            return MapperTypeForResult(Context, ResultType(TokenType(Tag, .comp)));
         }
 
         pub fn Parsers(Context: type, Tag: type) type {
@@ -358,7 +409,7 @@ pub fn Space(Item: type) type {
                 pub const Token = TokenType(Tag, phase);
                 pub const Result = ResultType(Token);
                 pub const Parser = ParserTypeForResult(Context, Result);
-                pub const Mapper = MapperType(Context, Result);
+                pub const Mapper = MapperTypeForResult(Context, Result);
 
                 pub fn keyword(tag: Tag, str: []const Item) Parser {
                     assert(str.len != 0);
@@ -390,6 +441,8 @@ pub fn Space(Item: type) type {
                     return shim.alwaysParser;
                 }
 
+                /// Match only at the end of input. Matches with a `.nothing` (which
+                /// disappears if not at the root of the AST).
                 pub fn eof() Parser {
                     const shim = struct {
                         fn eofParser(_: Context, input: []const Item) Error!Result {
@@ -401,6 +454,7 @@ pub fn Space(Item: type) type {
                     return shim.eofParser;
                 }
 
+                /// Consume the remainder of the input and return it in a `.slice`.
                 pub fn rest(tag: Tag) Parser {
                     const shim = struct {
                         fn restParser(_: Context, input: []const Item) Error!Result {
@@ -426,6 +480,8 @@ pub fn Space(Item: type) type {
                     return shim.takeWhileParser;
                 }
 
+                /// Try each of `parsers` in turn returning the result of the first
+                /// that succeeds. Fail if none succeeds.
                 pub fn alt(parsers: []const *const Parser) Parser {
                     const shim = struct {
                         fn furthest(a: []const Item, b: []const Item) []const Item {
@@ -447,6 +503,8 @@ pub fn Space(Item: type) type {
                     return shim.altParser;
                 }
 
+                /// Try `parsers` in sequence returning a `.list` of their results if they
+                /// all succeed otherwise fail.
                 pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
                     const shim = struct {
                         fn seqParser(ctx: Context, input: []const Item) Error!Result {
@@ -469,6 +527,8 @@ pub fn Space(Item: type) type {
                     return shim.seqParser;
                 }
 
+                /// If `lp` and `rp` succeed in sequence return the result of `lp` and
+                /// discard the result of `rp`.
                 pub fn left(lp: Parser, rp: Parser) Parser {
                     const shim = struct {
                         fn leftParser(ctx: Context, input: []const Item) Error!Result {
@@ -487,6 +547,8 @@ pub fn Space(Item: type) type {
                     return shim.leftParser;
                 }
 
+                /// If `lp` and `rp` succeed in sequence return the result of `rp` and
+                /// discard the result of `lp`.
                 pub fn right(lp: Parser, rp: Parser) Parser {
                     const shim = struct {
                         fn rightParser(ctx: Context, input: []const Item) Error!Result {
@@ -501,6 +563,8 @@ pub fn Space(Item: type) type {
                     return shim.rightParser;
                 }
 
+                /// If `lp`, `parser` and `rp` succeed in sequence return the result
+                /// of `parser` and discard the results of `lp` and `rp`.
                 pub fn between(lp: Parser, parser: Parser, rp: Parser) Parser {
                     return left(right(lp, parser), rp);
                 }
@@ -560,6 +624,9 @@ pub fn Space(Item: type) type {
                     return shim.mapParser;
                 }
 
+                /// If `parser` succeeds, discard its result and return a `.nothing` token
+                /// in its place. At any level of nesting other than the root of the AST
+                /// `.nothing` tokens are discarded and won't appear in the top level result.
                 pub fn discard(parser: Parser) Parser {
                     const shim = struct {
                         fn disardMapper(
@@ -575,6 +642,9 @@ pub fn Space(Item: type) type {
                     return mapTemp(parser, shim.disardMapper);
                 }
 
+                /// If `parser` succeeds return a `.slice` token containing the whole of the
+                /// matched text, tagged with `tag`. This often works as a bridge between
+                /// tokenizing and parsing.
                 pub fn span(tag: Tag, parser: Parser) Parser {
                     const shim = struct {
                         fn spanMapper(
@@ -591,25 +661,28 @@ pub fn Space(Item: type) type {
                     return mapTemp(parser, shim.spanMapper);
                 }
 
+                /// If parser returns a `.list` modify it so that it will flatten into the
+                /// parent token.
                 pub fn flat(parser: Parser) Parser {
                     const shim = struct {
                         fn flatParser(ctx: Context, input: []const Item) Error!Result {
                             const res = try parser(ctx, input);
-                            if (res.matched()) {
-                                return switch (res.tok.ok.value) {
-                                    .list => |list| .initOk(.{
-                                        .tag = res.tok.ok.tag,
-                                        .value = .{ .flat = list },
-                                    }, res.rest),
-                                    else => res,
-                                };
-                            }
-                            return res;
+                            if (!res.matched()) return res;
+                            return switch (res.tok.ok.value) {
+                                .list => |list| .initOk(.{
+                                    .tag = res.tok.ok.tag,
+                                    .value = .{ .flat = list },
+                                }, res.rest),
+                                else => res,
+                            };
                         }
                     };
                     return shim.flatParser;
                 }
 
+                /// Fail unless `parser` succeeds _and_ moves forwards in the text.
+                /// This is useful to wrap any composition of `zeroOrMore` parsers
+                /// to ensure that at least one of them made progress.
                 pub fn advances(parser: Parser) Parser {
                     const shim = struct {
                         fn advancesParser(ctx: Context, input: []const Item) Error!Result {
@@ -624,7 +697,8 @@ pub fn Space(Item: type) type {
                     return shim.advancesParser;
                 }
 
-                // If we receive a single element list lower it to the first item
+                /// If the result is a single element `.list` lower the result to its first
+                /// element.
                 pub fn lower(parser: Parser) Parser {
                     const shim = struct {
                         fn lowerParser(ctx: Context, input: []const Item) Error!Result {
@@ -646,6 +720,11 @@ pub fn Space(Item: type) type {
                     return shim.lowerParser;
                 }
 
+                /// If `lower_parser` succeeds call `upper_parser` on the matched text.
+                /// If `upper_parser` succeeds and consumes all of the text matched by
+                /// `lower_parser` return the its result otherwise return the result from
+                /// `lower_parser`. This is useful in the common case that language
+                /// keywords are a subset of identifiers.
                 pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
                     const upper_complete_parser = left(upper_parser, eof());
                     const shim = struct {
@@ -670,7 +749,8 @@ pub fn Space(Item: type) type {
                     return shim.refineParser;
                 }
 
-                // Call a parser that is pointed to by a field on the context.
+                /// Call a parser from `field_name` in the context. This makes it possible
+                /// to create recursive parsers.
                 pub fn recurse(field_name: []const Item) Parser {
                     const shim = struct {
                         fn recurseParser(ctx: Context, input: []const Item) Error!Result {
