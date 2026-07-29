@@ -564,13 +564,12 @@ pub fn Space(Item: type) type {
                 /// If `left_parser` and `right_parser` succeed in sequence return the left
                 /// result and discard the right.
                 pub fn left(left_parser: Parser, right_parser: Parser) Parser {
-                    const discard_right_parser = discard(right_parser);
                     const shim = struct {
                         fn leftParser(ctx: Context, input: []const Item) Error!Result {
                             const lres = try left_parser(ctx, input);
                             errdefer lres.deinit(ctx);
                             if (!lres.matched()) return lres;
-                            const rres = try discard_right_parser(ctx, lres.rest);
+                            const rres = try discard(right_parser)(ctx, lres.rest);
                             if (!rres.matched()) {
                                 lres.deinit(ctx);
                                 return .initFail(rres.tok.fail, input);
@@ -584,10 +583,9 @@ pub fn Space(Item: type) type {
                 /// If `left_parser` and `right_parser` succeed in sequence return the right
                 /// result and discard the left.
                 pub fn right(left_parser: Parser, right_parser: Parser) Parser {
-                    const discard_left_parser = discard(left_parser);
                     const shim = struct {
                         fn rightParser(ctx: Context, input: []const Item) Error!Result {
-                            const lres = try discard_left_parser(ctx, input);
+                            const lres = try discard(left_parser)(ctx, input);
                             if (!lres.matched()) return lres;
                             const rres = try right_parser(ctx, lres.rest);
                             if (!rres.matched()) return .initFail(rres.tok.fail, input);
@@ -609,14 +607,13 @@ pub fn Space(Item: type) type {
 
                 pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
                     assert(quantifier.min <= quantifier.max);
-                    const advancing_parser = advances(parser);
                     const shim = struct {
                         fn manyParser(ctx: Context, input: []const Item) Error!Result {
                             var list: Token.ArrayList = .empty;
                             errdefer Token.deinitArrayList(&list, ctx);
                             var tail = input;
                             while (list.items.len < quantifier.max) {
-                                const res = try advancing_parser(ctx, tail);
+                                const res = try advances(parser)(ctx, tail);
                                 if (!res.matched()) {
                                     if (list.items.len >= quantifier.min)
                                         break;
@@ -772,7 +769,6 @@ pub fn Space(Item: type) type {
                 /// `lower_parser` return its result otherwise return the result from
                 /// `lower_parser`.
                 pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
-                    const upper_complete_parser = left(upper_parser, eof());
                     const shim = struct {
                         fn refineParser(ctx: Context, input: []const Item) Error!Result {
                             const lres = try lower_parser(ctx, input);
@@ -782,7 +778,7 @@ pub fn Space(Item: type) type {
                                 return lres;
 
                             const consumed: usize = input.len - lres.rest.len;
-                            var ures = try upper_complete_parser(ctx, input[0..consumed]);
+                            var ures = try left(upper_parser, eof())(ctx, input[0..consumed]);
 
                             if (!ures.matched())
                                 return lres;
