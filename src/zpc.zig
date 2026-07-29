@@ -560,15 +560,15 @@ pub fn Space(Item: type) type {
                     return shim.seqParser;
                 }
 
-                /// If `lp` and `rp` succeed in sequence return the result of `lp` and
-                /// discard the result of `rp`.
-                pub fn left(lp: Parser, rp: Parser) Parser {
+                /// If `left_parser` and `right_parser` succeed in sequence return the left
+                /// result and discard the right result.
+                pub fn left(left_parser: Parser, right_parser: Parser) Parser {
                     const shim = struct {
                         fn leftParser(ctx: Context, input: []const Item) Error!Result {
-                            const lres = try lp(ctx, input);
+                            const lres = try left_parser(ctx, input);
                             errdefer lres.deinit(ctx);
                             if (!lres.matched()) return .initFail(lres.tok.fail, input);
-                            const rres = try rp(ctx, lres.rest);
+                            const rres = try right_parser(ctx, lres.rest);
                             defer rres.deinit(ctx);
                             if (!rres.matched()) {
                                 lres.deinit(ctx);
@@ -580,15 +580,15 @@ pub fn Space(Item: type) type {
                     return shim.leftParser;
                 }
 
-                /// If `lp` and `rp` succeed in sequence return the result of `rp` and
-                /// discard the result of `lp`.
-                pub fn right(lp: Parser, rp: Parser) Parser {
+                /// If `left_parser` and `right_parser` succeed in sequence return the right
+                /// result and discard the left result.
+                pub fn right(left_parser: Parser, right_parser: Parser) Parser {
                     const shim = struct {
                         fn rightParser(ctx: Context, input: []const Item) Error!Result {
-                            const lres = try lp(ctx, input);
+                            const lres = try left_parser(ctx, input);
                             defer lres.deinit(ctx);
                             if (!lres.matched()) return .initFail(lres.tok.fail, input);
-                            const rres = try rp(ctx, lres.rest);
+                            const rres = try right_parser(ctx, lres.rest);
                             if (!rres.matched()) return .initFail(rres.tok.fail, input);
                             return rres;
                         }
@@ -596,10 +596,14 @@ pub fn Space(Item: type) type {
                     return shim.rightParser;
                 }
 
-                /// If `lp`, `parser` and `rp` succeed in sequence return the result
-                /// of `parser` and discard the results of `lp` and `rp`.
-                pub fn between(lp: Parser, parser: Parser, rp: Parser) Parser {
-                    return left(right(lp, parser), rp);
+                /// If `left_parser`, `parser` and `right_parser` succeed in sequence return
+                /// the result of `parser` and discard the left and right results.
+                pub fn between(
+                    left_parser: Parser,
+                    parser: Parser,
+                    right_parser: Parser,
+                ) Parser {
+                    return left(right(left_parser, parser), right_parser);
                 }
 
                 pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
