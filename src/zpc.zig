@@ -637,6 +637,15 @@ pub fn Space(Item: type) type {
                     return shim.optionalParser;
                 }
 
+                pub fn map(parser: Parser, mapper: Mapper) Parser {
+                    const shim = struct {
+                        fn mapParser(ctx: Context, input: []const Item) Error!Result {
+                            return try mapper(ctx, input, try parser(ctx, input));
+                        }
+                    };
+                    return shim.mapParser;
+                }
+
                 pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
                     const shim = switch (phase) {
                         .comp => struct {
