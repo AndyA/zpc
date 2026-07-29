@@ -455,6 +455,7 @@ pub fn Space(Item: type) type {
                     return keyword(Token.NOP, str);
                 }
 
+                /// Always match without consuming any input.
                 pub fn always(tag: Tag, frag: []const Item) Parser {
                     const shim = struct {
                         fn alwaysParser(_: Context, input: []const Item) Error!Result {
@@ -487,15 +488,19 @@ pub fn Space(Item: type) type {
                     return shim.restParser;
                 }
 
-                pub fn takeWhile(tag: Tag, bounds: Quantifier, pred: Predicate) Parser {
-                    assert(bounds.min <= bounds.max);
+                /// Consume from input while `pred` returns true. Fails of the number
+                /// of matched chars falls outside the bounds of `quantifier`.
+                pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
+                    assert(quantifier.min <= quantifier.max);
                     const shim = struct {
                         fn takeWhileParser(_: Context, input: []const Item) Error!Result {
-                            const len = @min(input.len, bounds.max);
+                            const len = @min(input.len, quantifier.max);
+                            if (len < quantifier.min)
+                                return .initFail("", input);
                             var pos: usize = 0;
                             while (pos < len and pred(input[pos]))
                                 pos += 1;
-                            if (pos < bounds.min)
+                            if (pos < quantifier.min)
                                 return .initFail(input[pos..], input);
                             return .initOk(.initSlice(tag, input[0..pos]), input[pos..]);
                         }
