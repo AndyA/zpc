@@ -427,8 +427,9 @@ pub fn Space(Item: type) type {
             return makeParsers(Context, Tag, .comp);
         }
 
-        /// This is the common destination of `Parsers` and `ComptimeParsers`. It returns
-        /// a struct that provides parser constructors bound to the supplied `Context` and
+        /// This is the common destination of [Parsers](#zpc.Space.Parsers) and
+        /// [ComptimeParsers](#zpc.Space.ComptimeParsers). It returns a struct
+        /// that provides parser constructors bound to the supplied `Context` and
         /// `Tag`.
         fn makeParsers(Context: type, Tag: type, phase: Phase) type {
             return struct {
