@@ -564,13 +564,13 @@ pub fn Space(Item: type) type {
                 /// If `left_parser` and `right_parser` succeed in sequence return the left
                 /// result and discard the right.
                 pub fn left(left_parser: Parser, right_parser: Parser) Parser {
+                    const discard_right_parser = discard(right_parser);
                     const shim = struct {
                         fn leftParser(ctx: Context, input: []const Item) Error!Result {
                             const lres = try left_parser(ctx, input);
                             errdefer lres.deinit(ctx);
-                            if (!lres.matched()) return .initFail(lres.tok.fail, input);
-                            const rres = try right_parser(ctx, lres.rest);
-                            defer rres.deinit(ctx);
+                            if (!lres.matched()) return lres;
+                            const rres = try discard_right_parser(ctx, lres.rest);
                             if (!rres.matched()) {
                                 lres.deinit(ctx);
                                 return .initFail(rres.tok.fail, input);
@@ -584,11 +584,11 @@ pub fn Space(Item: type) type {
                 /// If `left_parser` and `right_parser` succeed in sequence return the right
                 /// result and discard the left.
                 pub fn right(left_parser: Parser, right_parser: Parser) Parser {
+                    const discard_left_parser = discard(left_parser);
                     const shim = struct {
                         fn rightParser(ctx: Context, input: []const Item) Error!Result {
-                            const lres = try left_parser(ctx, input);
-                            defer lres.deinit(ctx);
-                            if (!lres.matched()) return .initFail(lres.tok.fail, input);
+                            const lres = try discard_left_parser(ctx, input);
+                            if (!lres.matched()) return lres;
                             const rres = try right_parser(ctx, lres.rest);
                             if (!rres.matched()) return .initFail(rres.tok.fail, input);
                             return rres;
