@@ -415,16 +415,21 @@ pub fn Space(Item: type) type {
             return MapperTypeForResult(Context, ResultType(TokenType(Tag, .comp)));
         }
 
+        /// [Here](#zpc.Space.makeParsers)
         pub fn Parsers(Context: type, Tag: type) type {
             if (!@hasField(Context, "allocator"))
                 @compileError("Context must have an allocator field");
             return makeParsers(Context, Tag, .run);
         }
 
+        /// [Here](#zpc.Space.makeParsers)
         pub fn ComptimeParsers(Context: type, Tag: type) type {
             return makeParsers(Context, Tag, .comp);
         }
 
+        /// This is the common destination of `Parsers` and `ComptimeParsers`. It returns
+        /// a struct that provides parser constructors bound to the supplied `Context` and
+        /// `Tag`.
         fn makeParsers(Context: type, Tag: type, phase: Phase) type {
             return struct {
                 pub const Token = TokenType(Tag, phase);
