@@ -604,13 +604,14 @@ pub fn Space(Item: type) type {
 
                 pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
                     assert(quantifier.min <= quantifier.max);
+                    const advancing_parser = advances(parser);
                     const shim = struct {
                         fn manyParser(ctx: Context, input: []const Item) Error!Result {
                             var list: Token.ArrayList = .empty;
                             errdefer Token.deinitArrayList(&list, ctx);
                             var tail = input;
                             while (list.items.len < quantifier.max) {
-                                const res = try parser(ctx, tail);
+                                const res = try advancing_parser(ctx, tail);
                                 if (!res.matched()) {
                                     if (list.items.len >= quantifier.min)
                                         break;
