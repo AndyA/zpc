@@ -446,6 +446,8 @@ pub fn Space(Item: type) type {
                 }
 
                 pub fn tagName(tag: Tag) Parser {
+                    // Only works with []u8
+                    assert(Item == u8);
                     return keyword(tag, @tagName(tag));
                 }
 
