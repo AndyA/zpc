@@ -493,7 +493,7 @@ pub fn Space(Item: type) type {
                     return shim.restParser;
                 }
 
-                /// Consume from input while `pred` returns true. Fails of the number
+                /// Consume from input while `pred` returns true. Fails if the number
                 /// of matched chars falls outside the bounds of `quantifier`.
                 pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
                     assert(quantifier.min <= quantifier.max);
@@ -769,9 +769,8 @@ pub fn Space(Item: type) type {
 
                 /// If `lower_parser` succeeds call `upper_parser` on the matched text.
                 /// If `upper_parser` succeeds and consumes all of the text matched by
-                /// `lower_parser` return the its result otherwise return the result from
-                /// `lower_parser`. This is useful in the common case that language
-                /// keywords are a subset of identifiers.
+                /// `lower_parser` return its result otherwise return the result from
+                /// `lower_parser`.
                 pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
                     const upper_complete_parser = left(upper_parser, eof());
                     const shim = struct {
