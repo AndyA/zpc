@@ -562,7 +562,7 @@ pub fn Space(Item: type) type {
                 }
 
                 /// If `left_parser` and `right_parser` succeed in sequence return the left
-                /// result and discard the right result.
+                /// result and discard the right.
                 pub fn left(left_parser: Parser, right_parser: Parser) Parser {
                     const shim = struct {
                         fn leftParser(ctx: Context, input: []const Item) Error!Result {
@@ -582,7 +582,7 @@ pub fn Space(Item: type) type {
                 }
 
                 /// If `left_parser` and `right_parser` succeed in sequence return the right
-                /// result and discard the left result.
+                /// result and discard the left.
                 pub fn right(left_parser: Parser, right_parser: Parser) Parser {
                     const shim = struct {
                         fn rightParser(ctx: Context, input: []const Item) Error!Result {
@@ -691,8 +691,7 @@ pub fn Space(Item: type) type {
                 }
 
                 /// If `parser` succeeds return a `.slice` token containing the whole of the
-                /// matched text, tagged with `tag`. This often works as a bridge between
-                /// tokenizing and parsing.
+                /// matched text, tagged with `tag`.
                 pub fn span(tag: Tag, parser: Parser) Parser {
                     const shim = struct {
                         fn spanMapper(
