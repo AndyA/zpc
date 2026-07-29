@@ -602,17 +602,17 @@ pub fn Space(Item: type) type {
                     return left(right(lp, parser), rp);
                 }
 
-                pub fn many(tag: Tag, bounds: Quantifier, parser: Parser) Parser {
-                    assert(bounds.min <= bounds.max);
+                pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
+                    assert(quantifier.min <= quantifier.max);
                     const shim = struct {
                         fn manyParser(ctx: Context, input: []const Item) Error!Result {
                             var list: Token.ArrayList = .empty;
                             errdefer Token.deinitArrayList(&list, ctx);
                             var tail = input;
-                            while (list.items.len < bounds.max) {
+                            while (list.items.len < quantifier.max) {
                                 const res = try parser(ctx, tail);
                                 if (!res.matched()) {
-                                    if (list.items.len >= bounds.min)
+                                    if (list.items.len >= quantifier.min)
                                         break;
                                     Token.deinitArrayList(&list, ctx);
                                     return .initFail(res.tok.fail, input);
