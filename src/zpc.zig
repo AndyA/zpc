@@ -62,14 +62,14 @@ pub const Quantifier = struct {
 /// const zpc = @import("zpc").Space(u21);
 /// ```
 ///
-pub fn Space(Item: type) type {
+pub fn Space(Char: type) type {
     return struct {
-        pub const Predicate = fn (item: Item) bool;
+        pub const Predicate = fn (char: Char) bool;
 
-        /// A predicate that matches any item
+        /// A predicate that matches any char
         pub fn predAny() Predicate {
             const shim = struct {
-                fn pred(_: Item) bool {
+                fn pred(_: Char) bool {
                     return true;
                 }
             };
@@ -80,8 +80,8 @@ pub fn Space(Item: type) type {
         /// predicates
         pub fn predAnd(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
-                fn pred(item: Item) bool {
-                    return a(item) and b(item);
+                fn pred(char: Char) bool {
+                    return a(char) and b(char);
                 }
             };
             return shim.pred;
@@ -91,8 +91,8 @@ pub fn Space(Item: type) type {
         /// predicates
         pub fn predOr(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
-                fn pred(item: Item) bool {
-                    return a(item) or b(item);
+                fn pred(char: Char) bool {
+                    return a(char) or b(char);
                 }
             };
             return shim.pred;
@@ -101,28 +101,28 @@ pub fn Space(Item: type) type {
         /// A predicate that negates the supplied predicate
         pub fn predNot(p: Predicate) Predicate {
             const shim = struct {
-                fn pred(item: Item) bool {
-                    return !p(item);
+                fn pred(char: Char) bool {
+                    return !p(char);
                 }
             };
             return shim.pred;
         }
 
         /// A predicate that is true if the item equals `want`
-        pub fn predEqual(want: Item) Predicate {
+        pub fn predEqual(want: Char) Predicate {
             const shim = struct {
-                fn pred(item: Item) bool {
-                    return item == want;
+                fn pred(char: Char) bool {
+                    return char == want;
                 }
             };
             return shim.pred;
         }
 
         /// A predicate that tests whether the item is in `charset`
-        pub fn predSet(charset: []const Item) Predicate {
+        pub fn predSet(charset: []const Char) Predicate {
             const shim = struct {
-                fn pred(item: Item) bool {
-                    return std.mem.containsAtLeastScalar(Item, charset, item, 1);
+                fn pred(char: Char) bool {
+                    return std.mem.containsAtLeastScalar(Char, charset, char, 1);
                 }
             };
             return shim.pred;
@@ -195,7 +195,7 @@ pub fn Space(Item: type) type {
                 tag: Tag = NOP,
                 value: union(enum(u8)) {
                     nothing: void,
-                    slice: []const Item,
+                    slice: []const Char,
                     list: []const Self,
                     flat: []const Self, // Like a list but flattens into its parent
                 },
@@ -218,7 +218,7 @@ pub fn Space(Item: type) type {
                     }
                 }
 
-                pub fn initSlice(tag: Tag, slice: []const Item) Self {
+                pub fn initSlice(tag: Tag, slice: []const Char) Self {
                     return .{ .tag = tag, .value = .{ .slice = slice } };
                 }
 
@@ -338,24 +338,24 @@ pub fn Space(Item: type) type {
                     /// Success: the token that was parsed
                     ok: Token,
                     /// Failure: the point at which parsing failed
-                    fail: []const Item,
+                    fail: []const Char,
                 },
                 /// The rest of the input
-                rest: []const Item,
+                rest: []const Char,
 
                 pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
                     try (Formatter{ .token = &self, .pretty = true }).format(writer);
                 }
 
-                pub fn initFail(at: []const Item, rest: []const Item) Self {
+                pub fn initFail(at: []const Char, rest: []const Char) Self {
                     return .{ .tok = .{ .fail = at }, .rest = rest };
                 }
 
-                pub fn initFailHere(rest: []const Item) Self {
+                pub fn initFailHere(rest: []const Char) Self {
                     return initFail(rest, rest);
                 }
 
-                pub fn initOk(value: Token, rest: []const Item) Self {
+                pub fn initOk(value: Token, rest: []const Char) Self {
                     return .{ .tok = .{ .ok = value }, .rest = rest };
                 }
 
@@ -380,7 +380,7 @@ pub fn Space(Item: type) type {
         }
 
         fn ParserTypeForResult(Context: type, Result: type) type {
-            return fn (ctx: Context, input: []const Item) Error!Result;
+            return fn (ctx: Context, input: []const Char) Error!Result;
         }
 
         pub fn ParserType(Context: type, Tag: type) type {
@@ -392,7 +392,7 @@ pub fn Space(Item: type) type {
         }
 
         fn MapperTypeForResult(Context: type, Result: type) type {
-            return fn (ctx: Context, input: []const Item, result: Result) Error!Result;
+            return fn (ctx: Context, input: []const Char, result: Result) Error!Result;
         }
 
         pub fn MapperType(Context: type, Tag: type) type {
@@ -426,12 +426,12 @@ pub fn Space(Item: type) type {
                 pub const Parser = ParserTypeForResult(Context, Result);
                 pub const Mapper = MapperTypeForResult(Context, Result);
 
-                pub fn keyword(tag: Tag, str: []const Item) Parser {
+                pub fn keyword(tag: Tag, str: []const Char) Parser {
                     assert(str.len != 0);
                     const shim = struct {
-                        fn keywordParser(_: Context, input: []const Item) Error!Result {
+                        fn keywordParser(_: Context, input: []const Char) Error!Result {
                             if (input.len >= str.len and
-                                std.mem.eql(Item, input[0..str.len], str))
+                                std.mem.eql(Char, input[0..str.len], str))
                                 return .initOk(.initSlice(tag, str), input[str.len..]);
                             return .initFailHere(input);
                         }
@@ -441,18 +441,18 @@ pub fn Space(Item: type) type {
 
                 pub fn tagName(tag: Tag) Parser {
                     // Only works with []u8
-                    assert(Item == u8);
+                    assert(Char == u8);
                     return keyword(tag, @tagName(tag));
                 }
 
-                pub fn literal(str: []const Item) Parser {
+                pub fn literal(str: []const Char) Parser {
                     return keyword(Token.NOP, str);
                 }
 
                 /// Always match without consuming any input.
-                pub fn always(tag: Tag, frag: []const Item) Parser {
+                pub fn always(tag: Tag, frag: []const Char) Parser {
                     const shim = struct {
-                        fn alwaysParser(_: Context, input: []const Item) Error!Result {
+                        fn alwaysParser(_: Context, input: []const Char) Error!Result {
                             return .initOk(.initSlice(tag, frag), input);
                         }
                     };
@@ -463,7 +463,7 @@ pub fn Space(Item: type) type {
                 /// disappears if not at the root of the AST).
                 pub fn eof() Parser {
                     const shim = struct {
-                        fn eofParser(_: Context, input: []const Item) Error!Result {
+                        fn eofParser(_: Context, input: []const Char) Error!Result {
                             if (input.len == 0)
                                 return .initOk(.nothing, input);
                             return .initFailHere(input);
@@ -475,7 +475,7 @@ pub fn Space(Item: type) type {
                 /// Consume the remainder of the input and return it in a `.slice`.
                 pub fn rest(tag: Tag) Parser {
                     const shim = struct {
-                        fn restParser(_: Context, input: []const Item) Error!Result {
+                        fn restParser(_: Context, input: []const Char) Error!Result {
                             return .initOk(.initSlice(tag, input), "");
                         }
                     };
@@ -488,7 +488,7 @@ pub fn Space(Item: type) type {
                 pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
                     assert(quantifier.min <= quantifier.max);
                     const shim = struct {
-                        fn takeWhileParser(_: Context, input: []const Item) Error!Result {
+                        fn takeWhileParser(_: Context, input: []const Char) Error!Result {
                             const len = @min(input.len, quantifier.max);
                             if (len < quantifier.min)
                                 return .initFail("", input);
@@ -514,11 +514,11 @@ pub fn Space(Item: type) type {
                 /// that succeeds. Fail if none succeeds.
                 pub fn alt(parsers: []const *const Parser) Parser {
                     const shim = struct {
-                        fn furthest(a: []const Item, b: []const Item) []const Item {
+                        fn furthest(a: []const Char, b: []const Char) []const Char {
                             return if (a.len < b.len) a else b;
                         }
 
-                        fn altParser(ctx: Context, input: []const Item) Error!Result {
+                        fn altParser(ctx: Context, input: []const Char) Error!Result {
                             var hwm = input;
                             inline for (parsers) |parser| {
                                 const res = try parser(ctx, input);
@@ -537,7 +537,7 @@ pub fn Space(Item: type) type {
                 /// all succeed otherwise fail.
                 pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
                     const shim = struct {
-                        fn seqParser(ctx: Context, input: []const Item) Error!Result {
+                        fn seqParser(ctx: Context, input: []const Char) Error!Result {
                             var list: Token.ArrayList = .empty;
                             errdefer Token.deinitArrayList(&list, ctx);
                             var tail = input;
@@ -561,7 +561,7 @@ pub fn Space(Item: type) type {
                 /// result and discard the right.
                 pub fn left(left_parser: Parser, right_parser: Parser) Parser {
                     const shim = struct {
-                        fn leftParser(ctx: Context, input: []const Item) Error!Result {
+                        fn leftParser(ctx: Context, input: []const Char) Error!Result {
                             const lres = try left_parser(ctx, input);
                             errdefer lres.deinit(ctx);
                             if (!lres.matched()) return lres;
@@ -580,7 +580,7 @@ pub fn Space(Item: type) type {
                 /// result and discard the left.
                 pub fn right(left_parser: Parser, right_parser: Parser) Parser {
                     const shim = struct {
-                        fn rightParser(ctx: Context, input: []const Item) Error!Result {
+                        fn rightParser(ctx: Context, input: []const Char) Error!Result {
                             const lres = try discard(left_parser)(ctx, input);
                             if (!lres.matched()) return lres;
                             const rres = try right_parser(ctx, lres.rest);
@@ -606,7 +606,7 @@ pub fn Space(Item: type) type {
                 pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
                     assert(quantifier.min <= quantifier.max);
                     const shim = struct {
-                        fn manyParser(ctx: Context, input: []const Item) Error!Result {
+                        fn manyParser(ctx: Context, input: []const Char) Error!Result {
                             var list: Token.ArrayList = .empty;
                             errdefer Token.deinitArrayList(&list, ctx);
                             var tail = input;
@@ -629,7 +629,7 @@ pub fn Space(Item: type) type {
 
                 pub fn optional(parser: Parser) Parser {
                     const shim = struct {
-                        fn optionalParser(ctx: Context, input: []const Item) Error!Result {
+                        fn optionalParser(ctx: Context, input: []const Char) Error!Result {
                             const res = try parser(ctx, input);
                             if (res.matched()) return res;
                             return .initOk(.nothing, input);
@@ -640,7 +640,7 @@ pub fn Space(Item: type) type {
 
                 pub fn map(parser: Parser, mapper: Mapper) Parser {
                     const shim = struct {
-                        fn mapParser(ctx: Context, input: []const Item) Error!Result {
+                        fn mapParser(ctx: Context, input: []const Char) Error!Result {
                             return try mapper(ctx, input, try parser(ctx, input));
                         }
                     };
@@ -650,12 +650,12 @@ pub fn Space(Item: type) type {
                 pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
                     const shim = switch (phase) {
                         .comp => struct {
-                            fn mapParser(ctx: Context, input: []const Item) Error!Result {
+                            fn mapParser(ctx: Context, input: []const Char) Error!Result {
                                 return try mapper(ctx, input, try parser(ctx, input));
                             }
                         },
                         .run => struct {
-                            fn mapParser(ctx: Context, input: []const Item) Error!Result {
+                            fn mapParser(ctx: Context, input: []const Char) Error!Result {
                                 var arena = std.heap.ArenaAllocator.init(ctx.allocator);
                                 defer arena.deinit();
                                 var tmp_ctx: Context = ctx;
@@ -674,7 +674,7 @@ pub fn Space(Item: type) type {
                     const shim = struct {
                         fn disardMapper(
                             _: Context,
-                            input: []const Item,
+                            input: []const Char,
                             res: Result,
                         ) Error!Result {
                             if (!res.matched()) return .initFail(res.tok.fail, input);
@@ -691,7 +691,7 @@ pub fn Space(Item: type) type {
                     const shim = struct {
                         fn spanMapper(
                             _: Context,
-                            input: []const Item,
+                            input: []const Char,
                             res: Result,
                         ) Error!Result {
                             if (!res.matched()) return .initFail(res.tok.fail, input);
@@ -707,7 +707,7 @@ pub fn Space(Item: type) type {
                 /// parent token.
                 pub fn flat(parser: Parser) Parser {
                     const shim = struct {
-                        fn flatParser(ctx: Context, input: []const Item) Error!Result {
+                        fn flatParser(ctx: Context, input: []const Char) Error!Result {
                             const res = try parser(ctx, input);
                             if (!res.matched()) return res;
                             return switch (res.tok.ok.value) {
@@ -727,7 +727,7 @@ pub fn Space(Item: type) type {
                 /// to ensure that at least one of them made progress.
                 pub fn advances(parser: Parser) Parser {
                     const shim = struct {
-                        fn advancesParser(ctx: Context, input: []const Item) Error!Result {
+                        fn advancesParser(ctx: Context, input: []const Char) Error!Result {
                             const res = try parser(ctx, input);
                             if (res.matched() and input.len == res.rest.len) {
                                 res.deinit(ctx);
@@ -743,7 +743,7 @@ pub fn Space(Item: type) type {
                 /// element.
                 pub fn lower(parser: Parser) Parser {
                     const shim = struct {
-                        fn lowerParser(ctx: Context, input: []const Item) Error!Result {
+                        fn lowerParser(ctx: Context, input: []const Char) Error!Result {
                             const res = try parser(ctx, input);
                             if (res.matched()) {
                                 switch (res.tok.ok.value) {
@@ -768,7 +768,7 @@ pub fn Space(Item: type) type {
                 /// `lower_parser`.
                 pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
                     const shim = struct {
-                        fn refineParser(ctx: Context, input: []const Item) Error!Result {
+                        fn refineParser(ctx: Context, input: []const Char) Error!Result {
                             const lres = try lower_parser(ctx, input);
                             errdefer lres.deinit(ctx);
 
@@ -791,9 +791,9 @@ pub fn Space(Item: type) type {
 
                 /// Call a parser from `field_name` in the context. This makes it possible
                 /// to create recursive parsers.
-                pub fn recurse(field_name: []const Item) Parser {
+                pub fn recurse(field_name: []const Char) Parser {
                     const shim = struct {
-                        fn recurseParser(ctx: Context, input: []const Item) Error!Result {
+                        fn recurseParser(ctx: Context, input: []const Char) Error!Result {
                             const parser = @field(ctx, field_name);
                             return parser(ctx, input);
                         }
