@@ -10,6 +10,7 @@ const zpc = @import("zpc");
 
 const JsonTag = enum(u8) {
     NONE,
+    MULTI,
     NUMBER,
     STRING,
     FALSE,
@@ -103,11 +104,14 @@ fn makeJsonParser() C.Parser {
 
 pub fn main(init: std.process.Init) !void {
     const jsonParser = makeJsonParser();
+    const gapParser = C.left(skipSpace, C.optional(C.literal(",")));
+    const jsonGapParser = C.left(jsonParser, gapParser);
+    const multiJsonParser = C.left(C.lower(C.many(.MULTI, .zeroOrMore, jsonGapParser)), C.eof());
     const ctx: JsonContext = .{
         .allocator = init.gpa,
         .jsonParser = jsonParser,
     };
-    const res = try jsonParser(ctx,
+    const res = try multiJsonParser(ctx,
         \\{
         \\  "things": [ -12.3e+99, 0, false, "Hello\n", [], {} ],
         \\  "sample": [ {}, [], -1e7, false, true, null ],
