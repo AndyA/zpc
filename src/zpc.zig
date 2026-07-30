@@ -112,17 +112,17 @@ pub fn TokenType(config: Config) type {
             }
         }
 
-        pub fn initSlice(tag: config.Tag, slice: []const config.Char) Self {
+        pub fn initSlice(_: config.Context, tag: config.Tag, slice: []const config.Char) Self {
             return .{ .tag = tag, .value = .{ .slice = slice } };
         }
 
-        pub fn initList(tag: config.Tag, list: []const Self) Self {
+        pub fn initList(_: config.Context, tag: config.Tag, list: []const Self) Self {
             return .{ .tag = tag, .value = .{ .list = list } };
         }
 
         pub fn initArrayList(ctx: config.Context, tag: config.Tag, array: *ArrayList) Error!Self {
             const list = try array.toOwnedSlice(getAlloc(ctx));
-            return initList(tag, list);
+            return initList(ctx, tag, list);
         }
 
         pub fn appendToArrayList(self: Self, ctx: config.Context, array: *ArrayList) Error!void {
@@ -369,10 +369,10 @@ pub fn Compiler(config: Config) type {
         pub fn keyword(tag: Tag, str: []const Char) Parser {
             assert(str.len != 0);
             const shim = struct {
-                fn keywordParser(_: Context, input: []const Char) Error!Result {
+                fn keywordParser(ctx: Context, input: []const Char) Error!Result {
                     if (input.len >= str.len and
                         std.mem.eql(Char, input[0..str.len], str))
-                        return .initOk(.initSlice(tag, str), input[str.len..]);
+                        return .initOk(.initSlice(ctx, tag, str), input[str.len..]);
                     return .initFailHere(input);
                 }
             };
@@ -386,7 +386,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.HELLO, "Hello"), ", World"),
+                .initOk(.initSlice(ctx, .HELLO, "Hello"), ", World"),
                 try parseHello(ctx, "Hello, World"),
             );
 
@@ -418,7 +418,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.HELLO, "HELLO"), ", WORLD"),
+                .initOk(.initSlice(ctx, .HELLO, "HELLO"), ", WORLD"),
                 try parseHello(ctx, "HELLO, WORLD"),
             );
         }
@@ -432,8 +432,8 @@ pub fn Compiler(config: Config) type {
         /// Always succeed without consuming any input.
         pub fn always(tag: Tag, frag: []const Char) Parser {
             const shim = struct {
-                fn alwaysParser(_: Context, input: []const Char) Error!Result {
-                    return .initOk(.initSlice(tag, frag), input);
+                fn alwaysParser(ctx: Context, input: []const Char) Error!Result {
+                    return .initOk(.initSlice(ctx, tag, frag), input);
                 }
             };
             return shim.alwaysParser;
@@ -445,7 +445,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.FOO, "foo"), "Hello, World"),
+                .initOk(.initSlice(ctx, .FOO, "foo"), "Hello, World"),
                 try parseAlways(ctx, "Hello, World"),
             );
         }
@@ -483,8 +483,8 @@ pub fn Compiler(config: Config) type {
         /// Consume the remainder of the input and return it in a `.slice`.
         pub fn rest(tag: Tag) Parser {
             const shim = struct {
-                fn restParser(_: Context, input: []const Char) Error!Result {
-                    return .initOk(.initSlice(tag, input), "");
+                fn restParser(ctx: Context, input: []const Char) Error!Result {
+                    return .initOk(.initSlice(ctx, tag, input), "");
                 }
             };
             return shim.restParser;
@@ -498,9 +498,9 @@ pub fn Compiler(config: Config) type {
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initSlice(.REST, "ABC."),
+                .initOk(.initList(ctx, .MULTI, &.{
+                    .initSlice(ctx, .DIGIT, "123"),
+                    .initSlice(ctx, .REST, "ABC."),
                 }), ""),
 
                 try parseAllDigits(ctx, "123ABC."),
@@ -513,7 +513,7 @@ pub fn Compiler(config: Config) type {
         pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
             assert(quantifier.min <= quantifier.max);
             const shim = struct {
-                fn takeWhileParser(_: Context, input: []const Char) Error!Result {
+                fn takeWhileParser(ctx: Context, input: []const Char) Error!Result {
                     const len = @min(input.len, quantifier.max);
                     if (len < quantifier.min)
                         return .initFail("", input);
@@ -522,7 +522,7 @@ pub fn Compiler(config: Config) type {
                         pos += 1;
                     if (pos < quantifier.min)
                         return .initFail(input[pos..], input);
-                    return .initOk(.initSlice(tag, input[0..pos]), input[pos..]);
+                    return .initOk(.initSlice(ctx, tag, input[0..pos]), input[pos..]);
                 }
             };
             return shim.takeWhileParser;
@@ -538,19 +538,19 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.DIGIT, "67"), "b"),
+                .initOk(.initSlice(ctx, .DIGIT, "67"), "b"),
                 try parseDigits(ctx, "67b"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.DIGIT, "67"), ""),
+                .initOk(.initSlice(ctx, .DIGIT, "67"), ""),
                 try parseDigits(ctx, "67"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.DIGIT, "67"), "8"),
+                .initOk(.initSlice(ctx, .DIGIT, "67"), "8"),
                 try parseDigits(ctx, "678"),
             );
 
@@ -601,13 +601,13 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.HELLO, "Hello"), ", World"),
+                .initOk(.initSlice(ctx, .HELLO, "Hello"), ", World"),
                 try parseAlt(ctx, "Hello, World"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "Bar"),
+                .initOk(.initSlice(ctx, .FOO, "Foo"), "Bar"),
                 try parseAlt(ctx, "FooBar"),
             );
 
@@ -653,9 +653,9 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initSlice(.ALPHA, "ABC"),
+                .initOk(.initList(ctx, .MULTI, &.{
+                    .initSlice(ctx, .DIGIT, "123"),
+                    .initSlice(ctx, .ALPHA, "ABC"),
                 }), "."),
 
                 try parseAlphaNum(ctx, "123ABC."),
@@ -693,7 +693,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "Baz"),
+                .initOk(.initSlice(ctx, .FOO, "Foo"), "Baz"),
                 try parseLeft(ctx, "FooBarBaz"),
             );
 
@@ -735,7 +735,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.BAR, "Bar"), "Baz"),
+                .initOk(.initSlice(ctx, .BAR, "Bar"), "Baz"),
                 try parseRight(ctx, "FooBarBaz"),
             );
 
@@ -772,7 +772,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.DIGIT, "123"), "."),
+                .initOk(.initSlice(ctx, .DIGIT, "123"), "."),
                 try parseBetween(ctx, "(123)."),
             );
 
@@ -825,20 +825,20 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.BAR, "Bar"),
+                .initOk(.initList(ctx, .MULTI, &.{
+                    .initSlice(ctx, .FOO, "Foo"),
+                    .initSlice(ctx, .FOO, "Foo"),
+                    .initSlice(ctx, .BAR, "Bar"),
                 }), "Baz"),
                 try parseFooBar(ctx, "FooFooBarBaz"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.BAR, "Bar"),
+                .initOk(.initList(ctx, .MULTI, &.{
+                    .initSlice(ctx, .FOO, "Foo"),
+                    .initSlice(ctx, .FOO, "Foo"),
+                    .initSlice(ctx, .BAR, "Bar"),
                 }), "BarBaz"),
                 try parseFooBar(ctx, "FooFooBarBarBaz"),
             );
@@ -872,7 +872,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.DIGIT, "123"), "Foo"),
+                .initOk(.initSlice(ctx, .DIGIT, "123"), "Foo"),
                 try parseMaybeNumber(ctx, "123Foo"),
             );
 
@@ -953,13 +953,13 @@ pub fn Compiler(config: Config) type {
         pub fn span(tag: Tag, parser: Parser) Parser {
             const shim = struct {
                 fn spanMapper(
-                    _: Context,
+                    ctx: Context,
                     input: []const Char,
                     res: Result,
                 ) Error!Result {
                     if (!res.succeeded()) return .initFail(res.tok.fail, input);
                     const consumed: usize = input.len - res.rest.len;
-                    return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
+                    return .initOk(.initSlice(ctx, tag, input[0..consumed]), res.rest);
                 }
             };
 
@@ -974,7 +974,7 @@ pub fn Compiler(config: Config) type {
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.ALNUM, "100abc"), "."),
+                .initOk(.initSlice(ctx, .ALNUM, "100abc"), "."),
                 try parseAlphaNum(ctx, "100abc."),
             );
         }
@@ -1012,10 +1012,10 @@ pub fn Compiler(config: Config) type {
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
             const expr = "1,2,3;";
-            const want: C.Result = .initOk(.initList(.ARRAY, &.{
-                .initSlice(.DIGIT, "1"),
-                .initSlice(.DIGIT, "2"),
-                .initSlice(.DIGIT, "3"),
+            const want: C.Result = .initOk(.initList(ctx, .ARRAY, &.{
+                .initSlice(ctx, .DIGIT, "1"),
+                .initSlice(ctx, .DIGIT, "2"),
+                .initSlice(ctx, .DIGIT, "3"),
             }), ";");
 
             if (false) {
@@ -1056,7 +1056,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.DIGIT, ""), "."),
+                .initOk(.initSlice(ctx, .DIGIT, ""), "."),
                 try parseDigits(ctx, "."),
             );
 
@@ -1097,23 +1097,23 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(.MULTI, &.{
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
-                    .initSlice(.FOO, "Foo"),
+                .initOk(.initList(ctx, .MULTI, &.{
+                    .initSlice(ctx, .FOO, "Foo"),
+                    .initSlice(ctx, .FOO, "Foo"),
+                    .initSlice(ctx, .FOO, "Foo"),
                 }), "."),
                 try parseLower(ctx, "FooFooFoo."),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "."),
+                .initOk(.initSlice(ctx, .FOO, "Foo"), "."),
                 try parseLower(ctx, "Foo."),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.FOO, "Foo"), "."),
+                .initOk(.initSlice(ctx, .FOO, "Foo"), "."),
                 try parseFlatLower(ctx, "Foo."),
             );
         }
@@ -1157,19 +1157,19 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.FOO, "Foo"), " Hello"),
+                .initOk(.initSlice(ctx, .FOO, "Foo"), " Hello"),
                 try parseKeyword(ctx, "Foo Hello"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.BAR, "Bar"), " Hello"),
+                .initOk(.initSlice(ctx, .BAR, "Bar"), " Hello"),
                 try parseKeyword(ctx, "Bar Hello"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(.IDENT, "FooBar"), " Hello"),
+                .initOk(.initSlice(ctx, .IDENT, "FooBar"), " Hello"),
                 try parseKeyword(ctx, "FooBar Hello"),
             );
         }
@@ -1213,32 +1213,32 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(.TERM, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initList(.MANY, &.{}),
+                .initOk(.initList(ctx, .TERM, &.{
+                    .initSlice(ctx, .DIGIT, "123"),
+                    .initList(ctx, .MANY, &.{}),
                 }), ";"),
                 try parseExpr(ctx, "123;"),
             );
 
             const expr = "(123 + 7) - 2 + 700;";
-            const want: C.Result = .initOk(.initList(.TERM, &.{
-                .initList(.TERM, &.{
-                    .initSlice(.DIGIT, "123"),
-                    .initList(.MANY, &.{
-                        .initList(.SEQ, &.{
-                            .initSlice(.PLUS, "+"),
-                            .initSlice(.DIGIT, "7"),
+            const want: C.Result = .initOk(.initList(ctx, .TERM, &.{
+                .initList(ctx, .TERM, &.{
+                    .initSlice(ctx, .DIGIT, "123"),
+                    .initList(ctx, .MANY, &.{
+                        .initList(ctx, .SEQ, &.{
+                            .initSlice(ctx, .PLUS, "+"),
+                            .initSlice(ctx, .DIGIT, "7"),
                         }),
                     }),
                 }),
-                .initList(.MANY, &.{
-                    .initList(.SEQ, &.{
-                        .initSlice(.MINUS, "-"),
-                        .initSlice(.DIGIT, "2"),
+                .initList(ctx, .MANY, &.{
+                    .initList(ctx, .SEQ, &.{
+                        .initSlice(ctx, .MINUS, "-"),
+                        .initSlice(ctx, .DIGIT, "2"),
                     }),
-                    .initList(.SEQ, &.{
-                        .initSlice(.PLUS, "+"),
-                        .initSlice(.DIGIT, "700"),
+                    .initList(ctx, .SEQ, &.{
+                        .initSlice(ctx, .PLUS, "+"),
+                        .initSlice(ctx, .DIGIT, "700"),
                     }),
                 }),
             }), ";");
@@ -1269,14 +1269,14 @@ pub fn Compiler(config: Config) type {
                 CP.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
             });
 
+            const ctx: ComptimeContext = .{};
             const res = comptime blk: {
-                const ctx: ComptimeContext = .{};
                 break :blk try parseAlphaNum(ctx, "123ABC.");
             };
 
-            try expectEqualDeep(CP.Result.initOk(.initList(.MULTI, &.{
-                .initSlice(.DIGIT, "123"),
-                .initSlice(.ALPHA, "ABC"),
+            try expectEqualDeep(CP.Result.initOk(.initList(ctx, .MULTI, &.{
+                .initSlice(ctx, .DIGIT, "123"),
+                .initSlice(ctx, .ALPHA, "ABC"),
             }), "."), res);
         }
     };
@@ -1325,4 +1325,8 @@ fn checkAndConsume(
 ) !void {
     defer actual.deinit(ctx);
     try expectEqualDeep(expected, actual);
+}
+
+test {
+    _ = Compiler(TestContext.config);
 }
