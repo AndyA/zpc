@@ -390,7 +390,8 @@ pub fn Compiler(config: Config) type {
 
         /// Succeed with a token tagged with `tag` if `str` is the next input.
         pub fn keyword(tag: Tag, str: []const Char) Parser {
-            assert(str.len != 0);
+            if (str.len == 0)
+                @compileError("Empty keyword not allowed");
             const shim = struct {
                 fn keywordParser(_: Context, input: []const Char) Error!Result {
                     if (input.len >= str.len and
@@ -534,7 +535,8 @@ pub fn Compiler(config: Config) type {
         /// of matched chars falls outside the bounds of `quantifier`. The matched
         /// chars are returned as a `.slice` token.
         pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
-            assert(quantifier.min <= quantifier.max);
+            if (quantifier.min > quantifier.max)
+                @compileError("Bad quantifier");
             const shim = struct {
                 fn takeWhileParser(_: Context, input: []const Char) Error!Result {
                     const len = @min(input.len, quantifier.max);
@@ -594,6 +596,9 @@ pub fn Compiler(config: Config) type {
         /// Try each of `parsers` in turn returning the result of the first
         /// that succeeds. Fail if none succeeds.
         pub fn alt(parsers: []const *const Parser) Parser {
+            if (parsers.len == 0)
+                @compileError("Empty seq");
+
             const shim = struct {
                 fn furthest(a: []const Char, b: []const Char) []const Char {
                     return if (a.len < b.len) a else b;
@@ -646,6 +651,8 @@ pub fn Compiler(config: Config) type {
         /// Try `parsers` in sequence returning a `.list` of their results if they
         /// all succeed otherwise fail.
         pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
+            if (parsers.len == 0)
+                @compileError("Empty seq");
             const shim = struct {
                 fn seqParser(ctx: Context, input: []const Char) Error!Result {
                     var list: Token.ArrayList = .empty;
@@ -811,7 +818,8 @@ pub fn Compiler(config: Config) type {
         /// Apply a parser until it fails or reaches `quantifier.max` matches and return
         /// the result as a `.list` token.
         pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
-            assert(quantifier.min <= quantifier.max);
+            if (quantifier.min > quantifier.max)
+                @compileError("Bad quantifier");
             const shim = struct {
                 fn manyParser(ctx: Context, input: []const Char) Error!Result {
                     var list: Token.ArrayList = .empty;
@@ -870,6 +878,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
+        /// If `parser` succeeds, discard its result and replace it with a `.nothing`
+        /// token that won't appear in the AST unless it's at the root.
         pub fn optional(parser: Parser) Parser {
             const shim = struct {
                 fn optionalParser(ctx: Context, input: []const Char) Error!Result {
@@ -902,6 +912,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
+        /// If `parser` succeeds pass the result through `mapper`. It's the responsibity
+        /// of the mapper to free any parts of the result that it doesn't return.
         pub fn map(parser: Parser, mapper: Mapper) Parser {
             const shim = struct {
                 fn mapParser(ctx: Context, input: []const Char) Error!Result {
@@ -911,6 +923,9 @@ pub fn Compiler(config: Config) type {
             return shim.mapParser;
         }
 
+        /// If `parser` succeeds pass the result through `mapper`. The result is temporary
+        /// and will be freed automatically so `mapper` must create a new result that doesn't
+        /// depend on any part of the result it's passed.
         pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
             const shim = switch (config.phase) {
                 .comp => struct {
@@ -1195,9 +1210,11 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Call a parser from `field_name` in the context. This makes it possible
-        /// to create recursive parsers.
+        /// Call a parser pointed to by the field `field_name` in the context. This makes
+        /// it possible to create recursive parsers.
         pub fn recurse(field_name: []const Char) Parser {
+            if (!@hasField(Context, field_name))
+                @compileError("Context has no field called " ++ field_name);
             const shim = struct {
                 fn recurseParser(ctx: Context, input: []const Char) Error!Result {
                     const parser = @field(ctx, field_name);
