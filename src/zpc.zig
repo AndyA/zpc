@@ -1162,7 +1162,8 @@ pub fn Compiler(config: Config) type {
                         return lres;
 
                     defer lres.deinit(ctx);
-                    ures.rest = lres.rest; // TODO surely redundant?
+                    ures.rest = lres.rest;
+                    ures.tok.ok.input = lres.tok.ok.input;
                     return ures;
                 }
             };
@@ -1181,13 +1182,13 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice("Foo", .FOO, "Foo"), " Hello"),
+                .initOk(.initSlice("Foo Hello", .FOO, "Foo"), " Hello"),
                 try parseKeyword(ctx, "Foo Hello"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice("Bar", .BAR, "Bar"), " Hello"),
+                .initOk(.initSlice("Bar Hello", .BAR, "Bar"), " Hello"),
                 try parseKeyword(ctx, "Bar Hello"),
             );
 
