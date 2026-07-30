@@ -367,6 +367,7 @@ pub fn Compiler(config: Config) type {
             }
         };
 
+        /// Succeed with a token tagged with `tag` if `str` is the next input.
         pub fn keyword(tag: Tag, str: []const Char) Parser {
             assert(str.len != 0);
             const shim = struct {
@@ -380,17 +381,21 @@ pub fn Compiler(config: Config) type {
             return shim.keywordParser;
         }
 
+        /// Succeed with a token tagged with `tag` if the next input is the
+        /// tag name of the tag. Useful with tags like e.g. @"<=".
         pub fn tagName(tag: Tag) Parser {
             // Only works with []u8
             assert(Char == u8);
             return keyword(tag, @tagName(tag));
         }
 
+        /// Succeed with a token tagged with `NOP` (the zeroeth `Tag`) if `str` is
+        /// the next input.
         pub fn literal(str: []const Char) Parser {
             return keyword(Token.NOP, str);
         }
 
-        /// Always match without consuming any input.
+        /// Always succeed without consuming any input.
         pub fn always(tag: Tag, frag: []const Char) Parser {
             const shim = struct {
                 fn alwaysParser(_: Context, input: []const Char) Error!Result {
