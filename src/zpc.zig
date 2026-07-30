@@ -482,8 +482,9 @@ pub fn Space(Item: type) type {
                     return shim.restParser;
                 }
 
-                /// Consume from input while `pred` returns true. Fails if the number
-                /// of matched chars falls outside the bounds of `quantifier`.
+                /// Consume chars from input while `pred` returns true. Fails if the number
+                /// of matched chars falls outside the bounds of `quantifier`. The matched
+                /// chars are returned as a `.slice` token.
                 pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
                     assert(quantifier.min <= quantifier.max);
                     const shim = struct {
@@ -502,8 +503,9 @@ pub fn Space(Item: type) type {
                     return shim.takeWhileParser;
                 }
 
-                /// Consume from input until `pred` returns true. Fails if the number
-                /// of matched chars falls outside the bounds of `quantifier`.
+                /// Consume chars from input until `pred` returns true. Fails if the number
+                /// of matched chars falls outside the bounds of `quantifier`. The matched
+                /// chars are returned as a `.slice` token.
                 pub fn takeUntil(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
                     return takeWhile(tag, quantifier, predNot(pred));
                 }
