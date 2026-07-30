@@ -381,12 +381,48 @@ pub fn Compiler(config: Config) type {
             return shim.keywordParser;
         }
 
+        test keyword {
+            const parseHello = C.keyword(.HELLO, "Hello");
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.HELLO, "Hello"), ", World"),
+                try parseHello(ctx, "Hello, World"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("H"),
+                try parseHello(ctx, "H"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("Hell or bust"),
+                try parseHello(ctx, "Hell or bust"),
+            );
+        }
+
         /// Succeed with a token tagged with `tag` if the next input is the
         /// tag name of the tag. Useful with tags like e.g. @"<=".
         pub fn tagName(tag: Tag) Parser {
             // Only works with []u8
             assert(Char == u8);
             return keyword(tag, @tagName(tag));
+        }
+
+        test tagName {
+            const parseHello = C.tagName(.HELLO);
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.HELLO, "HELLO"), ", WORLD"),
+                try parseHello(ctx, "HELLO, WORLD"),
+            );
         }
 
         /// Succeed with a token tagged with `NOP` (the zeroeth `Tag`) if `str` is
@@ -405,6 +441,17 @@ pub fn Compiler(config: Config) type {
             return shim.alwaysParser;
         }
 
+        test always {
+            const parseAlways = C.always(.FOO, "foo");
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.FOO, "foo"), "Hello, World"),
+                try parseAlways(ctx, "Hello, World"),
+            );
+        }
+
         /// Match only at the end of input. Matches with a `.nothing` (which
         /// disappears if not at the root of the AST).
         pub fn eof() Parser {
@@ -418,6 +465,23 @@ pub fn Compiler(config: Config) type {
             return shim.eofParser;
         }
 
+        test eof {
+            const parseEof = C.eof();
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.nothing, ""),
+                try parseEof(ctx, ""),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("X"),
+                try parseEof(ctx, "X"),
+            );
+        }
+
         /// Consume the remainder of the input and return it in a `.slice`.
         pub fn rest(tag: Tag) Parser {
             const shim = struct {
@@ -426,6 +490,23 @@ pub fn Compiler(config: Config) type {
                 }
             };
             return shim.restParser;
+        }
+
+        test rest {
+            const parseAllDigits = C.seq(.MULTI, &.{
+                C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+                C.rest(.REST),
+            });
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+            try checkAndConsume(
+                ctx,
+                .initOk(.initList(.MULTI, &.{
+                    .initSlice(.DIGIT, "123"),
+                    .initSlice(.REST, "ABC."),
+                }), ""),
+
+                try parseAllDigits(ctx, "123ABC."),
+            );
         }
 
         /// Consume chars from input while `pred` returns true. Fails if the number
@@ -447,6 +528,39 @@ pub fn Compiler(config: Config) type {
                 }
             };
             return shim.takeWhileParser;
+        }
+
+        test takeWhile {
+            const parseDigits = C.takeWhile(
+                .DIGIT,
+                .range(1, 2),
+                std.ascii.isDigit,
+            );
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.DIGIT, "67"), "b"),
+                try parseDigits(ctx, "67b"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.DIGIT, "67"), ""),
+                try parseDigits(ctx, "67"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.DIGIT, "67"), "8"),
+                try parseDigits(ctx, "678"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("X"),
+                try parseDigits(ctx, "X"),
+            );
         }
 
         /// Consume chars from input until `pred` returns true. Fails if the number
@@ -479,6 +593,35 @@ pub fn Compiler(config: Config) type {
             return shim.altParser;
         }
 
+        test alt {
+            const parseAlt = C.alt(&.{
+                C.keyword(.HELLO, "Hello"),
+                C.keyword(.FOO, "Foo"),
+            });
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.HELLO, "Hello"), ", World"),
+                try parseAlt(ctx, "Hello, World"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.FOO, "Foo"), "Bar"),
+                try parseAlt(ctx, "FooBar"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("Hell or bust"),
+                try parseAlt(ctx, "Hell or bust"),
+            );
+
+            // TODO check hwm
+        }
+
         /// Try `parsers` in sequence returning a `.list` of their results if they
         /// all succeed otherwise fail.
         pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
@@ -503,6 +646,26 @@ pub fn Compiler(config: Config) type {
             return shim.seqParser;
         }
 
+        test seq {
+            const parseAlphaNum = C.seq(.MULTI, &.{
+                C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+                C.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+            });
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initList(.MULTI, &.{
+                    .initSlice(.DIGIT, "123"),
+                    .initSlice(.ALPHA, "ABC"),
+                }), "."),
+
+                try parseAlphaNum(ctx, "123ABC."),
+            );
+
+            // TODO fail
+        }
+
         /// If `left_parser` and `right_parser` succeed in sequence return the left
         /// result and discard the right.
         pub fn left(left_parser: Parser, right_parser: Parser) Parser {
@@ -522,6 +685,33 @@ pub fn Compiler(config: Config) type {
             return shim.leftParser;
         }
 
+        test left {
+            const parseLeft = C.left(
+                C.keyword(.FOO, "Foo"),
+                C.keyword(.BAR, "Bar"),
+            );
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.FOO, "Foo"), "Baz"),
+                try parseLeft(ctx, "FooBarBaz"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFail("Baz", "FooBaz"),
+                try parseLeft(ctx, "FooBaz"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("BarFoo"),
+                try parseLeft(ctx, "BarFoo"),
+            );
+        }
+
         /// If `left_parser` and `right_parser` succeed in sequence return the right
         /// result and discard the left.
         pub fn right(left_parser: Parser, right_parser: Parser) Parser {
@@ -537,6 +727,33 @@ pub fn Compiler(config: Config) type {
             return shim.rightParser;
         }
 
+        test right {
+            const parseRight = C.right(
+                C.keyword(.FOO, "Foo"),
+                C.keyword(.BAR, "Bar"),
+            );
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.BAR, "Bar"), "Baz"),
+                try parseRight(ctx, "FooBarBaz"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFail("Baz", "FooBaz"),
+                try parseRight(ctx, "FooBaz"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("BarFoo"),
+                try parseRight(ctx, "BarFoo"),
+            );
+        }
+
         /// If `left_parser`, `parser` and `right_parser` succeed in sequence return
         /// the result of `parser` and discard the left and right results.
         pub fn between(
@@ -545,6 +762,33 @@ pub fn Compiler(config: Config) type {
             right_parser: Parser,
         ) Parser {
             return left(right(left_parser, parser), right_parser);
+        }
+
+        test between {
+            const parseBetween = C.between(
+                C.literal("("),
+                C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+                C.literal(")"),
+            );
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.DIGIT, "123"), "."),
+                try parseBetween(ctx, "(123)."),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFail("", "(123"),
+                try parseBetween(ctx, "(123"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFail("", "("),
+                try parseBetween(ctx, "("),
+            );
         }
 
         /// Apply a parser until it fails or reaches `quantifier.max` matches and return
@@ -573,6 +817,42 @@ pub fn Compiler(config: Config) type {
             return shim.manyParser;
         }
 
+        test many {
+            const parseFooBar = C.many(
+                .MULTI,
+                .range(2, 3),
+                C.alt(&.{ C.keyword(.FOO, "Foo"), C.keyword(.BAR, "Bar") }),
+            );
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initList(.MULTI, &.{
+                    .initSlice(.FOO, "Foo"),
+                    .initSlice(.FOO, "Foo"),
+                    .initSlice(.BAR, "Bar"),
+                }), "Baz"),
+                try parseFooBar(ctx, "FooFooBarBaz"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initList(.MULTI, &.{
+                    .initSlice(.FOO, "Foo"),
+                    .initSlice(.FOO, "Foo"),
+                    .initSlice(.BAR, "Bar"),
+                }), "BarBaz"),
+                try parseFooBar(ctx, "FooFooBarBarBaz"),
+            );
+
+            // We need two or more so a single Foo shouldn't be consumed.
+            try checkAndConsume(
+                ctx,
+                .initFail(".", "Foo."),
+                try parseFooBar(ctx, "Foo."),
+            );
+        }
+
         pub fn optional(parser: Parser) Parser {
             const shim = struct {
                 fn optionalParser(ctx: Context, input: []const Char) Error!Result {
@@ -582,6 +862,27 @@ pub fn Compiler(config: Config) type {
                 }
             };
             return shim.optionalParser;
+        }
+
+        test optional {
+            const parseMaybeNumber = C.optional(C.takeWhile(
+                .DIGIT,
+                .oneOrMore,
+                std.ascii.isDigit,
+            ));
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.DIGIT, "123"), "Foo"),
+                try parseMaybeNumber(ctx, "123Foo"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.nothing, "Foo"),
+                try parseMaybeNumber(ctx, "Foo"),
+            );
         }
 
         pub fn map(parser: Parser, mapper: Mapper) Parser {
@@ -631,6 +932,24 @@ pub fn Compiler(config: Config) type {
             return mapTemp(parser, shim.disardMapper);
         }
 
+        test discard {
+            const parseHello = C.discard(C.keyword(.HELLO, "Hello"));
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.nothing, ", World"),
+                try parseHello(ctx, "Hello, World"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("H"),
+                try parseHello(ctx, "H"),
+            );
+        }
+
         /// If `parser` succeeds return a `.slice` token containing the whole of the
         /// matched text, tagged with `tag`.
         pub fn span(tag: Tag, parser: Parser) Parser {
@@ -647,6 +966,19 @@ pub fn Compiler(config: Config) type {
             };
 
             return mapTemp(parser, shim.spanMapper);
+        }
+
+        test span {
+            const parseAlphaNum = C.span(.ALNUM, C.seq(.MULTI, &.{
+                C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+                C.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+            }));
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.ALNUM, "100abc"), "."),
+                try parseAlphaNum(ctx, "100abc."),
+            );
         }
 
         /// If `parser` returns a `.list` modify it so that it will flatten into the
@@ -668,6 +1000,40 @@ pub fn Compiler(config: Config) type {
             return shim.flatParser;
         }
 
+        test flat {
+            const parseDigits = C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
+            const parseFlat = C.seq(.ARRAY, &.{
+                parseDigits,
+                C.flat(C.many(
+                    C.Token.NOP,
+                    .zeroOrMore,
+                    C.right(C.literal(","), parseDigits),
+                )),
+            });
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            const expr = "1,2,3;";
+            const want: C.Result = .initOk(.initList(.ARRAY, &.{
+                .initSlice(.DIGIT, "1"),
+                .initSlice(.DIGIT, "2"),
+                .initSlice(.DIGIT, "3"),
+            }), ";");
+
+            if (false) {
+                const res = try parseFlat(ctx, expr);
+                defer res.deinit(std.testing.allocator);
+                print("want: {f}\n", .{want});
+                print("res:  {f}\n", .{res});
+            }
+
+            try checkAndConsume(
+                ctx,
+                want,
+                try parseFlat(ctx, expr),
+            );
+        }
+
         /// Fail unless `parser` succeeds _and_ moves forwards in the text.
         /// This is useful to wrap any composition of `zeroOrMore` parsers
         /// to ensure that at least one of them made progress.
@@ -683,6 +1049,24 @@ pub fn Compiler(config: Config) type {
                 }
             };
             return shim.advancesParser;
+        }
+
+        test advances {
+            const parseDigits = C.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
+            const parseAdvances = C.advances(parseDigits);
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.DIGIT, ""), "."),
+                try parseDigits(ctx, "."),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFailHere("."),
+                try parseAdvances(ctx, "."),
+            );
         }
 
         /// If the result is a single element `.list` lower the result to its first
@@ -706,6 +1090,34 @@ pub fn Compiler(config: Config) type {
                 }
             };
             return shim.lowerParser;
+        }
+
+        test lower {
+            const parseLower = C.lower(C.many(.MULTI, .oneOrMore, C.keyword(.FOO, "Foo")));
+            const parseFlatLower = C.flat(parseLower);
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initList(.MULTI, &.{
+                    .initSlice(.FOO, "Foo"),
+                    .initSlice(.FOO, "Foo"),
+                    .initSlice(.FOO, "Foo"),
+                }), "."),
+                try parseLower(ctx, "FooFooFoo."),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.FOO, "Foo"), "."),
+                try parseLower(ctx, "Foo."),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.FOO, "Foo"), "."),
+                try parseFlatLower(ctx, "Foo."),
+            );
         }
 
         /// If `lower_parser` succeeds call `upper_parser` on the matched text.
@@ -735,6 +1147,35 @@ pub fn Compiler(config: Config) type {
             return shim.refineParser;
         }
 
+        test refine {
+            const parseKeyword = C.refine(
+                C.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
+                C.alt(&.{
+                    C.keyword(.FOO, "Foo"),
+                    C.keyword(.BAR, "Bar"),
+                }),
+            );
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.FOO, "Foo"), " Hello"),
+                try parseKeyword(ctx, "Foo Hello"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.BAR, "Bar"), " Hello"),
+                try parseKeyword(ctx, "Bar Hello"),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice(.IDENT, "FooBar"), " Hello"),
+                try parseKeyword(ctx, "FooBar Hello"),
+            );
+        }
+
         /// Call a parser from `field_name` in the context. This makes it possible
         /// to create recursive parsers.
         pub fn recurse(field_name: []const Char) Parser {
@@ -745,6 +1186,73 @@ pub fn Compiler(config: Config) type {
                 }
             };
             return shim.recurseParser;
+        }
+
+        test recurse {
+            const parseDigits = C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
+            const skipSpace = C.takeWhile(C.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
+
+            const parseAtom = C.right(skipSpace, C.alt(&.{
+                C.between(C.literal("("), C.recurse("expr"), C.literal(")")),
+                parseDigits,
+            }));
+
+            const parseTerm =
+                C.seq(.TERM, &.{
+                    parseAtom,
+                    C.many(.MANY, .zeroOrMore, C.seq(.SEQ, &.{
+                        C.right(skipSpace, C.alt(&.{ C.keyword(.PLUS, "+"), C.keyword(.MINUS, "-") })),
+                        parseAtom,
+                    })),
+                });
+
+            const parseExpr = parseTerm;
+
+            const ctx: TestContext = .{
+                .allocator = std.testing.allocator,
+                .expr = parseExpr,
+            };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initList(.TERM, &.{
+                    .initSlice(.DIGIT, "123"),
+                    .initList(.MANY, &.{}),
+                }), ";"),
+                try parseExpr(ctx, "123;"),
+            );
+
+            const expr = "(123 + 7) - 2 + 700;";
+            const want: C.Result = .initOk(.initList(.TERM, &.{
+                .initList(.TERM, &.{
+                    .initSlice(.DIGIT, "123"),
+                    .initList(.MANY, &.{
+                        .initList(.SEQ, &.{
+                            .initSlice(.PLUS, "+"),
+                            .initSlice(.DIGIT, "7"),
+                        }),
+                    }),
+                }),
+                .initList(.MANY, &.{
+                    .initList(.SEQ, &.{
+                        .initSlice(.MINUS, "-"),
+                        .initSlice(.DIGIT, "2"),
+                    }),
+                    .initList(.SEQ, &.{
+                        .initSlice(.PLUS, "+"),
+                        .initSlice(.DIGIT, "700"),
+                    }),
+                }),
+            }), ";");
+
+            if (false) {
+                const res = try parseExpr(ctx, expr);
+                defer res.deinit(std.testing.allocator);
+                print("want: {f}\n", .{want});
+                print("res:  {f}\n", .{res});
+            }
+
+            try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
         }
     };
 }
@@ -792,514 +1300,6 @@ fn checkAndConsume(
 ) !void {
     defer actual.deinit(ctx);
     try expectEqualDeep(expected, actual);
-}
-
-test "always" {
-    const parseAlways = C.always(.FOO, "foo");
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.FOO, "foo"), "Hello, World"),
-        try parseAlways(ctx, "Hello, World"),
-    );
-}
-
-test "eof" {
-    const parseEof = C.eof();
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.nothing, ""),
-        try parseEof(ctx, ""),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("X"),
-        try parseEof(ctx, "X"),
-    );
-}
-
-test "rest" {
-    const parseAllDigits = C.seq(.MULTI, &.{
-        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        C.rest(.REST),
-    });
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-    try checkAndConsume(
-        ctx,
-        .initOk(.initList(.MULTI, &.{
-            .initSlice(.DIGIT, "123"),
-            .initSlice(.REST, "ABC."),
-        }), ""),
-
-        try parseAllDigits(ctx, "123ABC."),
-    );
-}
-
-test "keyword" {
-    const parseHello = C.keyword(.HELLO, "Hello");
-
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.HELLO, "Hello"), ", World"),
-        try parseHello(ctx, "Hello, World"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("H"),
-        try parseHello(ctx, "H"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("Hell or bust"),
-        try parseHello(ctx, "Hell or bust"),
-    );
-}
-
-test "tagName" {
-    const parseHello = C.tagName(.HELLO);
-
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.HELLO, "HELLO"), ", WORLD"),
-        try parseHello(ctx, "HELLO, WORLD"),
-    );
-}
-
-test "takeWhile" {
-    const parseDigits = C.takeWhile(
-        .DIGIT,
-        .range(1, 2),
-        std.ascii.isDigit,
-    );
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.DIGIT, "67"), "b"),
-        try parseDigits(ctx, "67b"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.DIGIT, "67"), ""),
-        try parseDigits(ctx, "67"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.DIGIT, "67"), "8"),
-        try parseDigits(ctx, "678"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("X"),
-        try parseDigits(ctx, "X"),
-    );
-}
-
-test "alt" {
-    const parseAlt = C.alt(&.{
-        C.keyword(.HELLO, "Hello"),
-        C.keyword(.FOO, "Foo"),
-    });
-
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.HELLO, "Hello"), ", World"),
-        try parseAlt(ctx, "Hello, World"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.FOO, "Foo"), "Bar"),
-        try parseAlt(ctx, "FooBar"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("Hell or bust"),
-        try parseAlt(ctx, "Hell or bust"),
-    );
-
-    // TODO check hwm
-}
-
-test "seq" {
-    const parseAlphaNum = C.seq(.MULTI, &.{
-        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        C.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
-    });
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initList(.MULTI, &.{
-            .initSlice(.DIGIT, "123"),
-            .initSlice(.ALPHA, "ABC"),
-        }), "."),
-
-        try parseAlphaNum(ctx, "123ABC."),
-    );
-
-    // TODO fail
-}
-
-test "left" {
-    const parseLeft = C.left(
-        C.keyword(.FOO, "Foo"),
-        C.keyword(.BAR, "Bar"),
-    );
-
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.FOO, "Foo"), "Baz"),
-        try parseLeft(ctx, "FooBarBaz"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFail("Baz", "FooBaz"),
-        try parseLeft(ctx, "FooBaz"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("BarFoo"),
-        try parseLeft(ctx, "BarFoo"),
-    );
-}
-
-test "right" {
-    const parseRight = C.right(
-        C.keyword(.FOO, "Foo"),
-        C.keyword(.BAR, "Bar"),
-    );
-
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.BAR, "Bar"), "Baz"),
-        try parseRight(ctx, "FooBarBaz"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFail("Baz", "FooBaz"),
-        try parseRight(ctx, "FooBaz"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("BarFoo"),
-        try parseRight(ctx, "BarFoo"),
-    );
-}
-
-test "between" {
-    const parseBetween = C.between(
-        C.literal("("),
-        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        C.literal(")"),
-    );
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.DIGIT, "123"), "."),
-        try parseBetween(ctx, "(123)."),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFail("", "(123"),
-        try parseBetween(ctx, "(123"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFail("", "("),
-        try parseBetween(ctx, "("),
-    );
-}
-
-test "many" {
-    const parseFooBar = C.many(
-        .MULTI,
-        .range(2, 3),
-        C.alt(&.{ C.keyword(.FOO, "Foo"), C.keyword(.BAR, "Bar") }),
-    );
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initList(.MULTI, &.{
-            .initSlice(.FOO, "Foo"),
-            .initSlice(.FOO, "Foo"),
-            .initSlice(.BAR, "Bar"),
-        }), "Baz"),
-        try parseFooBar(ctx, "FooFooBarBaz"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initList(.MULTI, &.{
-            .initSlice(.FOO, "Foo"),
-            .initSlice(.FOO, "Foo"),
-            .initSlice(.BAR, "Bar"),
-        }), "BarBaz"),
-        try parseFooBar(ctx, "FooFooBarBarBaz"),
-    );
-
-    // We need two or more so a single Foo shouldn't be consumed.
-    try checkAndConsume(
-        ctx,
-        .initFail(".", "Foo."),
-        try parseFooBar(ctx, "Foo."),
-    );
-}
-
-test "optional" {
-    const parseMaybeNumber = C.optional(C.takeWhile(
-        .DIGIT,
-        .oneOrMore,
-        std.ascii.isDigit,
-    ));
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.DIGIT, "123"), "Foo"),
-        try parseMaybeNumber(ctx, "123Foo"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.nothing, "Foo"),
-        try parseMaybeNumber(ctx, "Foo"),
-    );
-}
-
-test "discard" {
-    const parseHello = C.discard(C.keyword(.HELLO, "Hello"));
-
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.nothing, ", World"),
-        try parseHello(ctx, "Hello, World"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("H"),
-        try parseHello(ctx, "H"),
-    );
-}
-
-test "span" {
-    const parseAlphaNum = C.span(.ALNUM, C.seq(.MULTI, &.{
-        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        C.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
-    }));
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.ALNUM, "100abc"), "."),
-        try parseAlphaNum(ctx, "100abc."),
-    );
-}
-
-test "flat" {
-    const parseDigits = C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
-    const parseFlat = C.seq(.ARRAY, &.{
-        parseDigits,
-        C.flat(C.many(
-            C.Token.NOP,
-            .zeroOrMore,
-            C.right(C.literal(","), parseDigits),
-        )),
-    });
-
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    const expr = "1,2,3;";
-    const want: C.Result = .initOk(.initList(.ARRAY, &.{
-        .initSlice(.DIGIT, "1"),
-        .initSlice(.DIGIT, "2"),
-        .initSlice(.DIGIT, "3"),
-    }), ";");
-
-    if (false) {
-        const res = try parseFlat(ctx, expr);
-        defer res.deinit(std.testing.allocator);
-        print("want: {f}\n", .{want});
-        print("res:  {f}\n", .{res});
-    }
-
-    try checkAndConsume(
-        ctx,
-        want,
-        try parseFlat(ctx, expr),
-    );
-}
-
-test "advances" {
-    const parseDigits = C.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
-    const parseAdvances = C.advances(parseDigits);
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.DIGIT, ""), "."),
-        try parseDigits(ctx, "."),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initFailHere("."),
-        try parseAdvances(ctx, "."),
-    );
-}
-
-test "lower" {
-    const parseLower = C.lower(C.many(.MULTI, .oneOrMore, C.keyword(.FOO, "Foo")));
-    const parseFlatLower = C.flat(parseLower);
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initList(.MULTI, &.{
-            .initSlice(.FOO, "Foo"),
-            .initSlice(.FOO, "Foo"),
-            .initSlice(.FOO, "Foo"),
-        }), "."),
-        try parseLower(ctx, "FooFooFoo."),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.FOO, "Foo"), "."),
-        try parseLower(ctx, "Foo."),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.FOO, "Foo"), "."),
-        try parseFlatLower(ctx, "Foo."),
-    );
-}
-
-test "refine" {
-    const parseKeyword = C.refine(
-        C.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
-        C.alt(&.{
-            C.keyword(.FOO, "Foo"),
-            C.keyword(.BAR, "Bar"),
-        }),
-    );
-    const ctx: TestContext = .{ .allocator = std.testing.allocator };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.FOO, "Foo"), " Hello"),
-        try parseKeyword(ctx, "Foo Hello"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.BAR, "Bar"), " Hello"),
-        try parseKeyword(ctx, "Bar Hello"),
-    );
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initSlice(.IDENT, "FooBar"), " Hello"),
-        try parseKeyword(ctx, "FooBar Hello"),
-    );
-}
-
-test "recurse" {
-    const parseDigits = C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
-    const skipSpace = C.takeWhile(C.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
-
-    const parseAtom = C.right(skipSpace, C.alt(&.{
-        C.between(C.literal("("), C.recurse("expr"), C.literal(")")),
-        parseDigits,
-    }));
-
-    const parseTerm =
-        C.seq(.TERM, &.{
-            parseAtom,
-            C.many(.MANY, .zeroOrMore, C.seq(.SEQ, &.{
-                C.right(skipSpace, C.alt(&.{ C.keyword(.PLUS, "+"), C.keyword(.MINUS, "-") })),
-                parseAtom,
-            })),
-        });
-
-    const parseExpr = parseTerm;
-
-    const ctx: TestContext = .{
-        .allocator = std.testing.allocator,
-        .expr = parseExpr,
-    };
-
-    try checkAndConsume(
-        ctx,
-        .initOk(.initList(.TERM, &.{
-            .initSlice(.DIGIT, "123"),
-            .initList(.MANY, &.{}),
-        }), ";"),
-        try parseExpr(ctx, "123;"),
-    );
-
-    const expr = "(123 + 7) - 2 + 700;";
-    const want: C.Result = .initOk(.initList(.TERM, &.{
-        .initList(.TERM, &.{
-            .initSlice(.DIGIT, "123"),
-            .initList(.MANY, &.{
-                .initList(.SEQ, &.{
-                    .initSlice(.PLUS, "+"),
-                    .initSlice(.DIGIT, "7"),
-                }),
-            }),
-        }),
-        .initList(.MANY, &.{
-            .initList(.SEQ, &.{
-                .initSlice(.MINUS, "-"),
-                .initSlice(.DIGIT, "2"),
-            }),
-            .initList(.SEQ, &.{
-                .initSlice(.PLUS, "+"),
-                .initSlice(.DIGIT, "700"),
-            }),
-        }),
-    }), ";");
-
-    if (false) {
-        const res = try parseExpr(ctx, expr);
-        defer res.deinit(std.testing.allocator);
-        print("want: {f}\n", .{want});
-        print("res:  {f}\n", .{res});
-    }
-
-    try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
 }
 
 test "ComptimeParsers" {
