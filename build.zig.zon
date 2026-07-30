@@ -1,6 +1,6 @@
 .{
     .name = .zpc,
-    .version = "0.0.0",
+    .version = "0.1.0",
     .fingerprint = 0x5da37d803b4da804,
     .minimum_zig_version = "0.17.0-dev.1503+1f1bee62e",
     .dependencies = .{},
