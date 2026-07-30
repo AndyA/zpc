@@ -40,6 +40,7 @@ pub fn build(b: *std.Build) void {
 
     const docs_step = b.step("docs", "Generate documentation");
     docs_step.dependOn(&install_docs.step);
+    test_step.dependOn(&install_docs.step);
 
     const coverage = b.option(bool, "coverage", "Enable zig-cov") orelse false;
     const rt_path = b.option([]const u8, "coverage-rt", "zig-cov-rt path") orelse null;
