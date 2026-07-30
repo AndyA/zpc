@@ -615,7 +615,7 @@ pub fn Compiler(config: Config) type {
         /// that succeeds. Fail if none succeeds.
         pub fn alt(parsers: []const *const Parser) Parser {
             if (parsers.len == 0)
-                @compileError("Empty seq");
+                @compileError("alt needs at least one parser");
 
             const shim = struct {
                 fn furthest(a: []const Char, b: []const Char) []const Char {
@@ -670,7 +670,7 @@ pub fn Compiler(config: Config) type {
         /// all succeed otherwise fail.
         pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
             if (parsers.len == 0)
-                @compileError("Empty seq");
+                @compileError("seq needs at least one parser");
             const shim = struct {
                 fn seqParser(ctx: Context, input: []const Char) Error!Result {
                     var list: Token.ArrayList = .empty;
