@@ -448,7 +448,8 @@ pub fn Compiler(config: Config) type {
         /// tag name of the tag. Useful with tags like `@"<="`.
         pub fn tagName(tag: Tag) Parser {
             // Only works with []u8
-            assert(Char == u8);
+            if (Char != u8)
+                @compileError("tagName can only be used with u8 characters");
             return keyword(tag, @tagName(tag));
         }
 
