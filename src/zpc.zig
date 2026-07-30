@@ -226,6 +226,9 @@ pub fn TokenType(config: Config) type {
 
 pub fn ResultType(config: Config) type {
     const Token = TokenType(config);
+    const Char = config.Char;
+    const Context = config.Context;
+
     return struct {
         const Self = @This();
 
@@ -237,10 +240,8 @@ pub fn ResultType(config: Config) type {
                 const token = self.token;
                 switch (token.tok) {
                     .ok => |ok| {
-                        try (Token.Formatter{
-                            .token = &ok,
-                            .pretty = self.pretty,
-                        }).format(writer);
+                        const formatter = Token.Formatter{ .token = &ok, .pretty = self.pretty };
+                        try formatter.format(writer);
                     },
                     .fail => |fail| {
                         try writer.print("FAIL at {s}", .{fail});
@@ -264,11 +265,11 @@ pub fn ResultType(config: Config) type {
         tok: union(enum) {
             /// Success: the token that was parsed
             ok: Token,
-            /// Failure: the point at which parsing failed
-            fail: []const config.Char,
+            /// Failure: the point where parsing failed
+            fail: []const Char,
         },
         /// The rest of the input
-        rest: []const config.Char,
+        rest: []const Char,
 
         pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
             try (Formatter{ .token = &self, .pretty = false }).format(writer);
@@ -280,26 +281,26 @@ pub fn ResultType(config: Config) type {
             return .{ .token = self, .pretty = true };
         }
 
-        pub fn initFail(at: []const config.Char, rest: []const config.Char) Self {
+        pub fn initFail(at: []const Char, rest: []const Char) Self {
             return .{ .tok = .{ .fail = at }, .rest = rest };
         }
 
-        pub fn initFailHere(rest: []const config.Char) Self {
+        pub fn initFailHere(rest: []const Char) Self {
             return initFail(rest, rest);
         }
 
-        pub fn initOk(value: Token, rest: []const config.Char) Self {
+        pub fn initOk(value: Token, rest: []const Char) Self {
             return .{ .tok = .{ .ok = value }, .rest = rest };
         }
 
-        pub fn deinit(self: Self, ctx: config.Context) void {
+        pub fn deinit(self: Self, ctx: Context) void {
             switch (self.tok) {
                 .ok => |ok| ok.deinit(ctx),
                 .fail => {},
             }
         }
 
-        pub fn deinitShallow(self: Self, ctx: config.Context) void {
+        pub fn deinitShallow(self: Self, ctx: Context) void {
             switch (self.tok) {
                 .ok => |ok| ok.deinitShallow(ctx),
                 .fail => {},
@@ -326,6 +327,7 @@ pub fn PredicateType(config: Config) type {
     return fn (char: config.Char) bool;
 }
 
+/// Create a parser compiler.
 pub fn Compiler(config: Config) type {
     const Char = config.Char;
     const Tag = config.Tag;
@@ -403,7 +405,7 @@ pub fn Compiler(config: Config) type {
             }
         };
 
-        /// Succeed with a token tagged with `tag` if `str` is the next input.
+        /// If `str` is thre next input succeed with a token tagged with `tag`.
         pub fn keyword(tag: Tag, str: []const Char) Parser {
             if (str.len == 0)
                 @compileError("Empty keyword not allowed");
