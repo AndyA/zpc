@@ -68,8 +68,8 @@ fn makeJsonParser() P.Parser {
     }));
 
     const charParser = P.alt(&.{
-        P.left(P.literal("\\"), P.takeWhile(.NONE, .one, P.predAny())),
-        P.takeUntil(.NONE, .oneOrMore, P.predSet("\"\\")),
+        P.left(P.literal("\\"), P.takeWhile(.NONE, .one, P.any_())),
+        P.takeUntil(.NONE, .oneOrMore, P.set_("\"\\")),
     });
 
     const stringParser = P.between(

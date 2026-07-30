@@ -16,14 +16,14 @@ const P = zpc.Zpc(CsvContext.config);
 
 fn makeCsvParser() P.Parser {
     // Skip horizontal whitespace
-    const skipSpace = P.takeWhile(.NONE, .zeroOrMore, P.predAnd(
+    const skipSpace = P.takeWhile(.NONE, .zeroOrMore, P.and_(
         std.ascii.isWhitespace,
-        P.predNot(P.predSet("\r\n")),
+        P.not_(P.set_("\r\n")),
     ));
 
     const charParser = P.alt(&.{
         P.literal("\"\""),
-        P.takeUntil(.NONE, .oneOrMore, P.predEqual('\"')),
+        P.takeUntil(.NONE, .oneOrMore, P.equal_('\"')),
     });
 
     const stringParser = P.between(
@@ -32,7 +32,7 @@ fn makeCsvParser() P.Parser {
         P.literal("\""),
     );
 
-    const bareParser = P.span(.BARE, P.takeUntil(.NONE, .zeroOrMore, P.predSet(",\r\n")));
+    const bareParser = P.span(.BARE, P.takeUntil(.NONE, .zeroOrMore, P.set_(",\r\n")));
 
     const valueParser = P.right(skipSpace, P.alt(&.{ stringParser, bareParser }));
 
