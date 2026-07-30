@@ -108,7 +108,7 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
-        /// A predicate that is true if the item equals the specified value
+        /// A predicate that is true if the item equals `want`
         pub fn predEqual(want: Item) Predicate {
             const shim = struct {
                 fn pred(item: Item) bool {
@@ -118,8 +118,7 @@ pub fn Space(Item: type) type {
             return shim.pred;
         }
 
-        /// A predicate that tests whether the item is contained in the specified
-        /// charset.
+        /// A predicate that tests whether the item is in `charset`
         pub fn predSet(charset: []const Item) Predicate {
             const shim = struct {
                 fn pred(item: Item) bool {
