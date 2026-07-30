@@ -8,7 +8,7 @@ const zpc = @import("zpc");
 
 const CsvTag = enum(u8) { NONE, QUOTED, BARE, ROW, CSV };
 const CsvContext = struct {
-    pub const config: zpc.Config = .{ .Tag = CsvTag, .Context = @This() };
+    const config: zpc.Config = .{ .Tag = CsvTag, .Context = @This() };
     allocator: Allocator,
 };
 

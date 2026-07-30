@@ -21,7 +21,7 @@ const JsonPathTag = enum(u8) {
 };
 
 const JsonPathContext = struct {
-    pub const config: zpc.Config = .{ .Tag = JsonPathTag, .Context = @This() };
+    const config: zpc.Config = .{ .Tag = JsonPathTag, .Context = @This() };
     allocator: Allocator,
 };
 

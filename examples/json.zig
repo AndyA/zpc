@@ -21,7 +21,7 @@ const JsonTag = enum(u8) {
 };
 
 const JsonContext = struct {
-    pub const config: zpc.Config = .{ .Tag = JsonTag, .Context = @This() };
+    const config: zpc.Config = .{ .Tag = JsonTag, .Context = @This() };
 
     allocator: Allocator,
     jsonParser: *const zpc.ParserType(config),

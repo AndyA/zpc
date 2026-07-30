@@ -1293,7 +1293,7 @@ test "recurse" {
 test "ComptimeParsers" {
     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
     const Context = struct {
-        pub const config: Config = .{
+        const config: Config = .{
             .Tag = Tag,
             .Context = @This(),
             .phase = .comp,
