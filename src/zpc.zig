@@ -428,7 +428,7 @@ pub fn Compiler(config: Config) type {
         }
 
         /// Succeed with a token tagged with `tag` if the next input is the
-        /// tag name of the tag. Useful with tags like e.g. `@"<="`.
+        /// tag name of the tag. Useful with tags like `@"<="`.
         pub fn tagName(tag: Tag) Parser {
             // Only works with []u8
             assert(Char == u8);
@@ -815,8 +815,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Apply a parser until it fails or reaches `quantifier.max` matches and return
-        /// the result as a `.list` token.
+        /// Apply `parser` until it fails or reaches `quantifier.max` matches and
+        /// collect the results as a `.list` token.
         pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
             if (quantifier.min > quantifier.max)
                 @compileError("Bad quantifier");
@@ -879,7 +879,7 @@ pub fn Compiler(config: Config) type {
         }
 
         /// If `parser` succeeds, discard its result and replace it with a `.nothing`
-        /// token that won't appear in the AST unless it's at the root.
+        /// token (which won't appear in the AST unless it's at the root).
         pub fn optional(parser: Parser) Parser {
             const shim = struct {
                 fn optionalParser(ctx: Context, input: []const Char) Error!Result {
