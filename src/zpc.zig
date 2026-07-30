@@ -89,7 +89,7 @@ pub fn TokenType(config: Config) type {
 
         tag: Tag = NOP,
         input: []const Char,
-        value: union(enum(u8)) {
+        value: union(enum) {
             nothing: void,
             slice: []const Char,
             list: []const Self,
