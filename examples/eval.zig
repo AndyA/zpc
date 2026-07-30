@@ -6,7 +6,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const zpc = @import("zpc").Space(u8);
+const zpc = @import("zpc");
 
 const Tag = enum(u8) {
     N, // means don't care - but `N` is shorter
@@ -34,10 +34,10 @@ const Tag = enum(u8) {
 
 const Context = struct {
     allocator: Allocator,
-    expr: *const zpc.ParserType(@This(), Tag),
+    expr: *const zpc.ParserType(.{ .Tag = Tag }, @This()),
 };
 
-const P = zpc.Parsers(Context, Tag);
+const P = zpc.Zpc(.{ .Tag = Tag }, Context);
 
 const skipSpace = P.takeWhile(.N, .zeroOrMore, std.ascii.isWhitespace);
 
@@ -55,8 +55,8 @@ fn makeExpressionParser() P.Parser {
     const l = P.literal;
     const intParser = P.takeWhile(.INT, .oneOrMore, std.ascii.isDigit);
 
-    const identFirstPred = zpc.predOr(std.ascii.isAlphabetic, zpc.predEqual('_'));
-    const identRestPred = zpc.predOr(identFirstPred, std.ascii.isDigit);
+    const identFirstPred = P.predOr(std.ascii.isAlphabetic, P.predEqual('_'));
+    const identRestPred = P.predOr(identFirstPred, std.ascii.isDigit);
 
     const identParser = P.span(.IDENT, P.left(
         P.takeWhile(.N, .one, identFirstPred),

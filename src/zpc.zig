@@ -14,24 +14,287 @@ const Allocator = std.mem.Allocator;
 const ct = @import("zpc/comptime.zig");
 
 pub const Quantifier = @import("zpc/Quantifier.zig");
+pub const Phase = enum { comp, run };
+const Error = error{OutOfMemory};
 
-/// Although it's common to parse slices of `u8`, parsers can be constructed for any
-/// suitable scalar type. Common examples include `u21` for Unicode code points, `u16`
-/// for utc-2 / utf-16. Any type for which `==` equality works should be fine.
-///
-/// You can choose the character type at import:
-///
-/// ```zig
-/// const zpc = @import("zpc").Space(u8);
-/// ```
-/// or
-/// ```zig
-/// const zpc = @import("zpc").Space(u21);
-/// ```
-///
-pub fn Space(Char: type) type {
+pub const ZpcConfig = struct {
+    Tag: type, // enum
+    phase: Phase = .run,
+    Char: type = u8,
+};
+
+pub fn TokenType(config: ZpcConfig) type {
     return struct {
-        pub const Predicate = fn (char: Char) bool;
+        const Self = @This();
+        pub const ArrayList = switch (config.phase) {
+            .comp => ct.ComptimeArrayList(Self),
+            .run => std.ArrayList(Self),
+        };
+        pub const NOP: config.Tag = @fromBackingInt(0);
+
+        pub const nothing: Self = .{ .tag = NOP, .value = .{ .nothing = {} } };
+
+        pub const Formatter = struct {
+            token: *const Self,
+            pretty: bool = false,
+            depth: usize = 0,
+
+            fn indent(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
+                if (self.pretty)
+                    for (0..self.depth) |_|
+                        try writer.print("    ", .{});
+            }
+
+            fn newLine(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
+                if (self.pretty)
+                    try writer.print("\n", .{});
+            }
+
+            pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
+                try self.indent(writer);
+                try writer.print(
+                    "{s}/{s}",
+                    .{ @tagName(self.token.value), @tagName(self.token.tag) },
+                );
+
+                switch (self.token.value) {
+                    .nothing => {},
+                    .slice => |slice| try writer.print(" \"{s}\"", .{slice}),
+                    .list, .flat => |list| {
+                        try writer.print("(", .{});
+                        if (list.len != 0) {
+                            try self.newLine(writer);
+                            for (list, 0..) |item, i| {
+                                const child: Formatter = .{
+                                    .token = &item,
+                                    .pretty = self.pretty,
+                                    .depth = self.depth + 1,
+                                };
+                                try writer.print("{f}", .{child});
+                                if (!self.pretty and i != list.len - 1)
+                                    try writer.print(", ", .{});
+                            }
+                            try self.indent(writer);
+                        }
+                        try writer.print(")", .{});
+                    },
+                }
+                try self.newLine(writer);
+            }
+        };
+
+        tag: config.Tag = NOP,
+        value: union(enum(u8)) {
+            nothing: void,
+            slice: []const config.Char,
+            list: []const Self,
+            flat: []const Self, // Like a list but flattens into its parent
+        },
+
+        pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
+            try (Formatter{ .token = &self }).format(writer);
+        }
+
+        fn getAlloc(ctx: anytype) Allocator {
+            return switch (config.phase) {
+                .comp => ct.non_allocator,
+                .run => ctx.allocator,
+            };
+        }
+
+        fn freeList(ctx: anytype, list: []const Self) void {
+            switch (config.phase) {
+                .comp => {},
+                .run => ctx.allocator.free(list),
+            }
+        }
+
+        pub fn initSlice(tag: config.Tag, slice: []const config.Char) Self {
+            return .{ .tag = tag, .value = .{ .slice = slice } };
+        }
+
+        pub fn initList(tag: config.Tag, list: []const Self) Self {
+            return .{ .tag = tag, .value = .{ .list = list } };
+        }
+
+        pub fn initArrayList(ctx: anytype, tag: config.Tag, array: *ArrayList) Error!Self {
+            const list = try array.toOwnedSlice(getAlloc(ctx));
+            return initList(tag, list);
+        }
+
+        pub fn appendToArrayList(self: Self, ctx: anytype, array: *ArrayList) Error!void {
+            switch (self.value) {
+                .nothing => {},
+                .slice, .list => try array.append(getAlloc(ctx), self),
+                .flat => |flat| {
+                    defer self.deinitShallow(ctx);
+                    try array.appendSlice(getAlloc(ctx), flat);
+                },
+            }
+        }
+
+        pub fn deinit(self: Self, ctx: anytype) void {
+            switch (self.value) {
+                .list, .flat => |list| deinitList(list, ctx),
+                .nothing, .slice => {},
+            }
+        }
+
+        pub fn deinitShallow(self: Self, ctx: anytype) void {
+            switch (self.value) {
+                .list, .flat => |list| freeList(ctx, list),
+                .nothing, .slice => {},
+            }
+        }
+
+        pub fn deinitList(list: []const Self, ctx: anytype) void {
+            for (list) |item| item.deinit(ctx);
+            freeList(ctx, list);
+        }
+
+        pub fn deinitArrayList(list: *ArrayList, ctx: anytype) void {
+            for (list.items) |item| item.deinit(ctx);
+            list.deinit(getAlloc(ctx));
+        }
+
+        /// For a `.list` or `.flat` return the slice of children. Panics if
+        /// called on a non-list.
+        pub fn children(self: Self) []const Self {
+            return switch (self.value) {
+                .flat, .list => |l| l,
+                else => unreachable,
+            };
+        }
+
+        /// For a `.list` or `.flat` return the first child. Panics if
+        /// called on a non-list or an empty list
+        pub fn head(self: Self) Self {
+            return self.children()[0];
+        }
+
+        /// For a `.list` or `.flat` return the child items after the first.
+        /// Panics if called on a non-list or an empty list
+        pub fn tail(self: Self) []const Self {
+            return self.children()[1..];
+        }
+
+        /// For a `.list` or `.flat` with precisely 2 elements return the
+        /// second element. Panics if called on a non-list or a list with
+        /// more or fewer than two elements.
+        pub fn other(self: Self) Self {
+            const l = self.children();
+            assert(l.len == 2);
+            return l[1];
+        }
+    };
+}
+
+pub fn ResultType(config: ZpcConfig) type {
+    const Token = TokenType(config);
+    return struct {
+        const Self = @This();
+
+        pub const Formatter = struct {
+            token: *const Self,
+            pretty: bool = false,
+
+            pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
+                const token = self.token;
+                switch (token.tok) {
+                    .ok => |ok| {
+                        try (Token.Formatter{
+                            .token = &ok,
+                            .pretty = self.pretty,
+                        }).format(writer);
+                    },
+                    .fail => |fail| {
+                        try writer.print("FAIL at {s}", .{fail});
+                        if (self.pretty)
+                            try writer.print("\n", .{});
+                    },
+                }
+
+                if (token.rest.len != 0) {
+                    if (!self.pretty)
+                        try writer.print(" ", .{});
+
+                    if (token.rest.len > 30)
+                        try writer.print("rest: \"{s}...\"", .{token.rest[0..30]})
+                    else
+                        try writer.print("rest: \"{s}\"", .{token.rest});
+                }
+            }
+        };
+
+        tok: union(enum) {
+            /// Success: the token that was parsed
+            ok: Token,
+            /// Failure: the point at which parsing failed
+            fail: []const config.Char,
+        },
+        /// The rest of the input
+        rest: []const config.Char,
+
+        pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
+            try (Formatter{ .token = &self, .pretty = true }).format(writer);
+        }
+
+        pub fn initFail(at: []const config.Char, rest: []const config.Char) Self {
+            return .{ .tok = .{ .fail = at }, .rest = rest };
+        }
+
+        pub fn initFailHere(rest: []const config.Char) Self {
+            return initFail(rest, rest);
+        }
+
+        pub fn initOk(value: Token, rest: []const config.Char) Self {
+            return .{ .tok = .{ .ok = value }, .rest = rest };
+        }
+
+        pub fn deinit(self: Self, ctx: anytype) void {
+            switch (self.tok) {
+                .ok => |ok| ok.deinit(ctx),
+                .fail => {},
+            }
+        }
+
+        pub fn deinitShallow(self: Self, ctx: anytype) void {
+            switch (self.tok) {
+                .ok => |ok| ok.deinitShallow(ctx),
+                .fail => {},
+            }
+        }
+
+        pub fn matched(self: Self) bool {
+            return self.tok == .ok;
+        }
+    };
+}
+
+pub fn ParserType(config: ZpcConfig, Context: type) type {
+    const Result = ResultType(config);
+    return fn (ctx: Context, input: []const config.Char) Error!Result;
+}
+
+pub fn MapperType(config: ZpcConfig, Context: type) type {
+    const Result = ResultType(config);
+    return fn (ctx: Context, input: []const config.Char, result: Result) Error!Result;
+}
+
+pub fn PredicateType(config: ZpcConfig) type {
+    return fn (char: config.Char) bool;
+}
+
+pub fn Zpc(config: ZpcConfig, Context: type) type {
+    const Char = config.Char;
+    const Tag = config.Tag;
+
+    return struct {
+        pub const Token = TokenType(config);
+        pub const Result = ResultType(config);
+        pub const Parser = ParserType(config, Context);
+        pub const Mapper = MapperType(config, Context);
+        pub const Predicate = PredicateType(config);
 
         /// A predicate that matches any char
         pub fn predAny() Predicate {
@@ -89,685 +352,385 @@ pub fn Space(Char: type) type {
         pub fn predSet(charset: []const Char) Predicate {
             const shim = struct {
                 fn pred(char: Char) bool {
-                    return std.mem.containsAtLeastScalar(Char, charset, char, 1);
+                    return std.mem.containsAtLeastScalar(config.Char, charset, char, 1);
                 }
             };
             return shim.pred;
         }
 
-        const Error = error{OutOfMemory};
-
-        const Phase = enum { comp, run };
-
-        fn TokenType(Tag: type, phase: Phase) type {
-            return struct {
-                const Self = @This();
-                pub const ArrayList = switch (phase) {
-                    .comp => ct.ComptimeArrayList(Self),
-                    .run => std.ArrayList(Self),
-                };
-                pub const NOP: Tag = @fromBackingInt(0);
-
-                pub const nothing: Self = .{ .tag = NOP, .value = .{ .nothing = {} } };
-
-                pub const Formatter = struct {
-                    token: *const Self,
-                    pretty: bool = false,
-                    depth: usize = 0,
-
-                    fn indent(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
-                        if (self.pretty)
-                            for (0..self.depth) |_|
-                                try writer.print("    ", .{});
-                    }
-
-                    fn newLine(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
-                        if (self.pretty)
-                            try writer.print("\n", .{});
-                    }
-
-                    pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
-                        try self.indent(writer);
-                        try writer.print(
-                            "{s}/{s}",
-                            .{ @tagName(self.token.value), @tagName(self.token.tag) },
-                        );
-
-                        switch (self.token.value) {
-                            .nothing => {},
-                            .slice => |slice| try writer.print(" \"{s}\"", .{slice}),
-                            .list, .flat => |list| {
-                                try writer.print("(", .{});
-                                if (list.len != 0) {
-                                    try self.newLine(writer);
-                                    for (list, 0..) |item, i| {
-                                        const child: Formatter = .{
-                                            .token = &item,
-                                            .pretty = self.pretty,
-                                            .depth = self.depth + 1,
-                                        };
-                                        try writer.print("{f}", .{child});
-                                        if (!self.pretty and i != list.len - 1)
-                                            try writer.print(", ", .{});
-                                    }
-                                    try self.indent(writer);
-                                }
-                                try writer.print(")", .{});
-                            },
-                        }
-                        try self.newLine(writer);
-                    }
-                };
-
-                tag: Tag = NOP,
-                value: union(enum(u8)) {
-                    nothing: void,
-                    slice: []const Char,
-                    list: []const Self,
-                    flat: []const Self, // Like a list but flattens into its parent
-                },
-
-                pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
-                    try (Formatter{ .token = &self }).format(writer);
-                }
-
-                fn getAlloc(ctx: anytype) Allocator {
-                    return switch (phase) {
-                        .comp => ct.non_allocator,
-                        .run => ctx.allocator,
-                    };
-                }
-
-                fn freeList(ctx: anytype, list: []const Self) void {
-                    switch (phase) {
-                        .comp => {},
-                        .run => ctx.allocator.free(list),
-                    }
-                }
-
-                pub fn initSlice(tag: Tag, slice: []const Char) Self {
-                    return .{ .tag = tag, .value = .{ .slice = slice } };
-                }
-
-                pub fn initList(tag: Tag, list: []const Self) Self {
-                    return .{ .tag = tag, .value = .{ .list = list } };
-                }
-
-                pub fn initArrayList(ctx: anytype, tag: Tag, array: *ArrayList) Error!Self {
-                    const list = try array.toOwnedSlice(getAlloc(ctx));
-                    return initList(tag, list);
-                }
-
-                pub fn appendToArrayList(self: Self, ctx: anytype, array: *ArrayList) Error!void {
-                    switch (self.value) {
-                        .nothing => {},
-                        .slice, .list => try array.append(getAlloc(ctx), self),
-                        .flat => |flat| {
-                            defer self.deinitShallow(ctx);
-                            try array.appendSlice(getAlloc(ctx), flat);
-                        },
-                    }
-                }
-
-                pub fn deinit(self: Self, ctx: anytype) void {
-                    switch (self.value) {
-                        .list, .flat => |list| deinitList(list, ctx),
-                        .nothing, .slice => {},
-                    }
-                }
-
-                pub fn deinitShallow(self: Self, ctx: anytype) void {
-                    switch (self.value) {
-                        .list, .flat => |list| freeList(ctx, list),
-                        .nothing, .slice => {},
-                    }
-                }
-
-                pub fn deinitList(list: []const Self, ctx: anytype) void {
-                    for (list) |item| item.deinit(ctx);
-                    freeList(ctx, list);
-                }
-
-                pub fn deinitArrayList(list: *ArrayList, ctx: anytype) void {
-                    for (list.items) |item| item.deinit(ctx);
-                    list.deinit(getAlloc(ctx));
-                }
-
-                /// For a `.list` or `.flat` return the slice of children. Panics if
-                /// called on a non-list.
-                pub fn children(self: Self) []const Self {
-                    return switch (self.value) {
-                        .flat, .list => |l| l,
-                        else => unreachable,
-                    };
-                }
-
-                /// For a `.list` or `.flat` return the first child. Panics if
-                /// called on a non-list or an empty list
-                pub fn head(self: Self) Self {
-                    return self.children()[0];
-                }
-
-                /// For a `.list` or `.flat` return the child items after the first.
-                /// Panics if called on a non-list or an empty list
-                pub fn tail(self: Self) []const Self {
-                    return self.children()[1..];
-                }
-
-                /// For a `.list` or `.flat` with precisely 2 elements return the
-                /// second element. Panics if called on a non-list or a list with
-                /// more or fewer than two elements.
-                pub fn other(self: Self) Self {
-                    const l = self.children();
-                    assert(l.len == 2);
-                    return l[1];
+        pub fn keyword(tag: Tag, str: []const Char) Parser {
+            assert(str.len != 0);
+            const shim = struct {
+                fn keywordParser(_: Context, input: []const Char) Error!Result {
+                    if (input.len >= str.len and
+                        std.mem.eql(Char, input[0..str.len], str))
+                        return .initOk(.initSlice(tag, str), input[str.len..]);
+                    return .initFailHere(input);
                 }
             };
+            return shim.keywordParser;
         }
 
-        fn ResultType(Token: type) type {
-            return struct {
-                const Self = @This();
+        pub fn tagName(tag: Tag) Parser {
+            // Only works with []u8
+            assert(Char == u8);
+            return keyword(tag, @tagName(tag));
+        }
 
-                pub const Formatter = struct {
-                    token: *const Self,
-                    pretty: bool = false,
+        pub fn literal(str: []const Char) Parser {
+            return keyword(Token.NOP, str);
+        }
 
-                    pub fn format(self: @This(), writer: *Io.Writer) Io.Writer.Error!void {
-                        const token = self.token;
-                        switch (token.tok) {
-                            .ok => |ok| {
-                                try (Token.Formatter{
-                                    .token = &ok,
-                                    .pretty = self.pretty,
-                                }).format(writer);
-                            },
-                            .fail => |fail| {
-                                try writer.print("FAIL at {s}", .{fail});
-                                if (self.pretty)
-                                    try writer.print("\n", .{});
-                            },
-                        }
-
-                        if (token.rest.len != 0) {
-                            if (!self.pretty)
-                                try writer.print(" ", .{});
-
-                            if (token.rest.len > 30)
-                                try writer.print("rest: \"{s}...\"", .{token.rest[0..30]})
-                            else
-                                try writer.print("rest: \"{s}\"", .{token.rest});
-                        }
-                    }
-                };
-
-                tok: union(enum) {
-                    /// Success: the token that was parsed
-                    ok: Token,
-                    /// Failure: the point at which parsing failed
-                    fail: []const Char,
-                },
-                /// The rest of the input
-                rest: []const Char,
-
-                pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
-                    try (Formatter{ .token = &self, .pretty = true }).format(writer);
-                }
-
-                pub fn initFail(at: []const Char, rest: []const Char) Self {
-                    return .{ .tok = .{ .fail = at }, .rest = rest };
-                }
-
-                pub fn initFailHere(rest: []const Char) Self {
-                    return initFail(rest, rest);
-                }
-
-                pub fn initOk(value: Token, rest: []const Char) Self {
-                    return .{ .tok = .{ .ok = value }, .rest = rest };
-                }
-
-                pub fn deinit(self: Self, ctx: anytype) void {
-                    switch (self.tok) {
-                        .ok => |ok| ok.deinit(ctx),
-                        .fail => {},
-                    }
-                }
-
-                pub fn deinitShallow(self: Self, ctx: anytype) void {
-                    switch (self.tok) {
-                        .ok => |ok| ok.deinitShallow(ctx),
-                        .fail => {},
-                    }
-                }
-
-                pub fn matched(self: Self) bool {
-                    return self.tok == .ok;
+        /// Always match without consuming any input.
+        pub fn always(tag: Tag, frag: []const Char) Parser {
+            const shim = struct {
+                fn alwaysParser(_: Context, input: []const Char) Error!Result {
+                    return .initOk(.initSlice(tag, frag), input);
                 }
             };
+            return shim.alwaysParser;
         }
 
-        fn ParserTypeForResult(Context: type, Result: type) type {
-            return fn (ctx: Context, input: []const Char) Error!Result;
+        /// Match only at the end of input. Matches with a `.nothing` (which
+        /// disappears if not at the root of the AST).
+        pub fn eof() Parser {
+            const shim = struct {
+                fn eofParser(_: Context, input: []const Char) Error!Result {
+                    if (input.len == 0)
+                        return .initOk(.nothing, input);
+                    return .initFailHere(input);
+                }
+            };
+            return shim.eofParser;
         }
 
-        pub fn ParserType(Context: type, Tag: type) type {
-            return ParserTypeForResult(Context, ResultType(TokenType(Tag, .run)));
+        /// Consume the remainder of the input and return it in a `.slice`.
+        pub fn rest(tag: Tag) Parser {
+            const shim = struct {
+                fn restParser(_: Context, input: []const Char) Error!Result {
+                    return .initOk(.initSlice(tag, input), "");
+                }
+            };
+            return shim.restParser;
         }
 
-        pub fn ComptimeParserType(Context: type, Tag: type) type {
-            return ParserTypeForResult(Context, ResultType(TokenType(Tag, .comp)));
+        /// Consume chars from input while `pred` returns true. Fails if the number
+        /// of matched chars falls outside the bounds of `quantifier`. The matched
+        /// chars are returned as a `.slice` token.
+        pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
+            assert(quantifier.min <= quantifier.max);
+            const shim = struct {
+                fn takeWhileParser(_: Context, input: []const Char) Error!Result {
+                    const len = @min(input.len, quantifier.max);
+                    if (len < quantifier.min)
+                        return .initFail("", input);
+                    var pos: usize = 0;
+                    while (pos < len and pred(input[pos]))
+                        pos += 1;
+                    if (pos < quantifier.min)
+                        return .initFail(input[pos..], input);
+                    return .initOk(.initSlice(tag, input[0..pos]), input[pos..]);
+                }
+            };
+            return shim.takeWhileParser;
         }
 
-        fn MapperTypeForResult(Context: type, Result: type) type {
-            return fn (ctx: Context, input: []const Char, result: Result) Error!Result;
+        /// Consume chars from input until `pred` returns true. Fails if the number
+        /// of matched chars falls outside the bounds of `quantifier`. The matched
+        /// chars are returned as a `.slice` token.
+        pub fn takeUntil(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
+            return takeWhile(tag, quantifier, predNot(pred));
         }
 
-        pub fn MapperType(Context: type, Tag: type) type {
-            return MapperTypeForResult(Context, ResultType(TokenType(Tag, .run)));
-        }
-
-        pub fn ComptimeMapperType(Context: type, Tag: type) type {
-            return MapperTypeForResult(Context, ResultType(TokenType(Tag, .comp)));
-        }
-
-        /// [Here](#zpc.Space.makeParsers)
-        pub fn Parsers(Context: type, Tag: type) type {
-            if (!@hasField(Context, "allocator"))
-                @compileError("Context must have an allocator field");
-            return makeParsers(Context, Tag, .run);
-        }
-
-        /// [Here](#zpc.Space.makeParsers)
-        pub fn ComptimeParsers(Context: type, Tag: type) type {
-            return makeParsers(Context, Tag, .comp);
-        }
-
-        /// This is the common destination of [Parsers](#zpc.Space.Parsers) and
-        /// [ComptimeParsers](#zpc.Space.ComptimeParsers). It returns a struct
-        /// that provides parser constructors bound to the supplied `Context` and
-        /// `Tag`.
-        fn makeParsers(Context: type, Tag: type, phase: Phase) type {
-            return struct {
-                pub const Token = TokenType(Tag, phase);
-                pub const Result = ResultType(Token);
-                pub const Parser = ParserTypeForResult(Context, Result);
-                pub const Mapper = MapperTypeForResult(Context, Result);
-
-                pub fn keyword(tag: Tag, str: []const Char) Parser {
-                    assert(str.len != 0);
-                    const shim = struct {
-                        fn keywordParser(_: Context, input: []const Char) Error!Result {
-                            if (input.len >= str.len and
-                                std.mem.eql(Char, input[0..str.len], str))
-                                return .initOk(.initSlice(tag, str), input[str.len..]);
-                            return .initFailHere(input);
-                        }
-                    };
-                    return shim.keywordParser;
+        /// Try each of `parsers` in turn returning the result of the first
+        /// that succeeds. Fail if none succeeds.
+        pub fn alt(parsers: []const *const Parser) Parser {
+            const shim = struct {
+                fn furthest(a: []const Char, b: []const Char) []const Char {
+                    return if (a.len < b.len) a else b;
                 }
 
-                pub fn tagName(tag: Tag) Parser {
-                    // Only works with []u8
-                    assert(Char == u8);
-                    return keyword(tag, @tagName(tag));
-                }
-
-                pub fn literal(str: []const Char) Parser {
-                    return keyword(Token.NOP, str);
-                }
-
-                /// Always match without consuming any input.
-                pub fn always(tag: Tag, frag: []const Char) Parser {
-                    const shim = struct {
-                        fn alwaysParser(_: Context, input: []const Char) Error!Result {
-                            return .initOk(.initSlice(tag, frag), input);
-                        }
-                    };
-                    return shim.alwaysParser;
-                }
-
-                /// Match only at the end of input. Matches with a `.nothing` (which
-                /// disappears if not at the root of the AST).
-                pub fn eof() Parser {
-                    const shim = struct {
-                        fn eofParser(_: Context, input: []const Char) Error!Result {
-                            if (input.len == 0)
-                                return .initOk(.nothing, input);
-                            return .initFailHere(input);
-                        }
-                    };
-                    return shim.eofParser;
-                }
-
-                /// Consume the remainder of the input and return it in a `.slice`.
-                pub fn rest(tag: Tag) Parser {
-                    const shim = struct {
-                        fn restParser(_: Context, input: []const Char) Error!Result {
-                            return .initOk(.initSlice(tag, input), "");
-                        }
-                    };
-                    return shim.restParser;
-                }
-
-                /// Consume chars from input while `pred` returns true. Fails if the number
-                /// of matched chars falls outside the bounds of `quantifier`. The matched
-                /// chars are returned as a `.slice` token.
-                pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
-                    assert(quantifier.min <= quantifier.max);
-                    const shim = struct {
-                        fn takeWhileParser(_: Context, input: []const Char) Error!Result {
-                            const len = @min(input.len, quantifier.max);
-                            if (len < quantifier.min)
-                                return .initFail("", input);
-                            var pos: usize = 0;
-                            while (pos < len and pred(input[pos]))
-                                pos += 1;
-                            if (pos < quantifier.min)
-                                return .initFail(input[pos..], input);
-                            return .initOk(.initSlice(tag, input[0..pos]), input[pos..]);
-                        }
-                    };
-                    return shim.takeWhileParser;
-                }
-
-                /// Consume chars from input until `pred` returns true. Fails if the number
-                /// of matched chars falls outside the bounds of `quantifier`. The matched
-                /// chars are returned as a `.slice` token.
-                pub fn takeUntil(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
-                    return takeWhile(tag, quantifier, predNot(pred));
-                }
-
-                /// Try each of `parsers` in turn returning the result of the first
-                /// that succeeds. Fail if none succeeds.
-                pub fn alt(parsers: []const *const Parser) Parser {
-                    const shim = struct {
-                        fn furthest(a: []const Char, b: []const Char) []const Char {
-                            return if (a.len < b.len) a else b;
-                        }
-
-                        fn altParser(ctx: Context, input: []const Char) Error!Result {
-                            var hwm = input;
-                            inline for (parsers) |parser| {
-                                const res = try parser(ctx, input);
-                                if (res.matched())
-                                    return res;
-                                hwm = furthest(hwm, res.tok.fail);
-                            }
-
-                            return .initFail(hwm, input);
-                        }
-                    };
-                    return shim.altParser;
-                }
-
-                /// Try `parsers` in sequence returning a `.list` of their results if they
-                /// all succeed otherwise fail.
-                pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
-                    const shim = struct {
-                        fn seqParser(ctx: Context, input: []const Char) Error!Result {
-                            var list: Token.ArrayList = .empty;
-                            errdefer Token.deinitArrayList(&list, ctx);
-                            var tail = input;
-                            inline for (parsers) |parser| {
-                                const res = try parser(ctx, tail);
-                                if (!res.matched()) {
-                                    Token.deinitArrayList(&list, ctx);
-                                    return .initFail(res.tok.fail, input);
-                                }
-                                tail = res.rest;
-                                try res.tok.ok.appendToArrayList(ctx, &list);
-                            }
-
-                            return .initOk(try .initArrayList(ctx, tag, &list), tail);
-                        }
-                    };
-                    return shim.seqParser;
-                }
-
-                /// If `left_parser` and `right_parser` succeed in sequence return the left
-                /// result and discard the right.
-                pub fn left(left_parser: Parser, right_parser: Parser) Parser {
-                    const shim = struct {
-                        fn leftParser(ctx: Context, input: []const Char) Error!Result {
-                            const lres = try left_parser(ctx, input);
-                            errdefer lres.deinit(ctx);
-                            if (!lres.matched()) return lres;
-                            const rres = try discard(right_parser)(ctx, lres.rest);
-                            if (!rres.matched()) {
-                                lres.deinit(ctx);
-                                return .initFail(rres.tok.fail, input);
-                            }
-                            return .initOk(lres.tok.ok, rres.rest);
-                        }
-                    };
-                    return shim.leftParser;
-                }
-
-                /// If `left_parser` and `right_parser` succeed in sequence return the right
-                /// result and discard the left.
-                pub fn right(left_parser: Parser, right_parser: Parser) Parser {
-                    const shim = struct {
-                        fn rightParser(ctx: Context, input: []const Char) Error!Result {
-                            const lres = try discard(left_parser)(ctx, input);
-                            if (!lres.matched()) return lres;
-                            const rres = try right_parser(ctx, lres.rest);
-                            if (!rres.matched()) return .initFail(rres.tok.fail, input);
-                            return rres;
-                        }
-                    };
-                    return shim.rightParser;
-                }
-
-                /// If `left_parser`, `parser` and `right_parser` succeed in sequence return
-                /// the result of `parser` and discard the left and right results.
-                pub fn between(
-                    left_parser: Parser,
-                    parser: Parser,
-                    right_parser: Parser,
-                ) Parser {
-                    return left(right(left_parser, parser), right_parser);
-                }
-
-                /// Apply a parser until it fails or reaches `quantifier.max` matches and return
-                /// the result as a `.list` token.
-                pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
-                    assert(quantifier.min <= quantifier.max);
-                    const shim = struct {
-                        fn manyParser(ctx: Context, input: []const Char) Error!Result {
-                            var list: Token.ArrayList = .empty;
-                            errdefer Token.deinitArrayList(&list, ctx);
-                            var tail = input;
-                            while (list.items.len < quantifier.max) {
-                                const res = try advances(parser)(ctx, tail);
-                                if (!res.matched()) {
-                                    if (list.items.len >= quantifier.min)
-                                        break;
-                                    Token.deinitArrayList(&list, ctx);
-                                    return .initFail(res.tok.fail, input);
-                                }
-                                tail = res.rest;
-                                try res.tok.ok.appendToArrayList(ctx, &list);
-                            }
-                            return .initOk(try .initArrayList(ctx, tag, &list), tail);
-                        }
-                    };
-                    return shim.manyParser;
-                }
-
-                pub fn optional(parser: Parser) Parser {
-                    const shim = struct {
-                        fn optionalParser(ctx: Context, input: []const Char) Error!Result {
-                            const res = try parser(ctx, input);
-                            if (res.matched()) return res;
-                            return .initOk(.nothing, input);
-                        }
-                    };
-                    return shim.optionalParser;
-                }
-
-                pub fn map(parser: Parser, mapper: Mapper) Parser {
-                    const shim = struct {
-                        fn mapParser(ctx: Context, input: []const Char) Error!Result {
-                            return try mapper(ctx, input, try parser(ctx, input));
-                        }
-                    };
-                    return shim.mapParser;
-                }
-
-                pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
-                    const shim = switch (phase) {
-                        .comp => struct {
-                            fn mapParser(ctx: Context, input: []const Char) Error!Result {
-                                return try mapper(ctx, input, try parser(ctx, input));
-                            }
-                        },
-                        .run => struct {
-                            fn mapParser(ctx: Context, input: []const Char) Error!Result {
-                                var arena = std.heap.ArenaAllocator.init(ctx.allocator);
-                                defer arena.deinit();
-                                var tmp_ctx: Context = ctx;
-                                tmp_ctx.allocator = arena.allocator();
-                                return try mapper(ctx, input, try parser(tmp_ctx, input));
-                            }
-                        },
-                    };
-                    return shim.mapParser;
-                }
-
-                /// If `parser` succeeds, discard its result and return a `.nothing` token
-                /// in its place. At any level of nesting other than the root of the AST
-                /// `.nothing` tokens are discarded and won't appear in the result.
-                pub fn discard(parser: Parser) Parser {
-                    const shim = struct {
-                        fn disardMapper(
-                            _: Context,
-                            input: []const Char,
-                            res: Result,
-                        ) Error!Result {
-                            if (!res.matched()) return .initFail(res.tok.fail, input);
-                            return .initOk(.nothing, res.rest);
-                        }
-                    };
-
-                    return mapTemp(parser, shim.disardMapper);
-                }
-
-                /// If `parser` succeeds return a `.slice` token containing the whole of the
-                /// matched text, tagged with `tag`.
-                pub fn span(tag: Tag, parser: Parser) Parser {
-                    const shim = struct {
-                        fn spanMapper(
-                            _: Context,
-                            input: []const Char,
-                            res: Result,
-                        ) Error!Result {
-                            if (!res.matched()) return .initFail(res.tok.fail, input);
-                            const consumed: usize = input.len - res.rest.len;
-                            return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
-                        }
-                    };
-
-                    return mapTemp(parser, shim.spanMapper);
-                }
-
-                /// If `parser` returns a `.list` modify it so that it will flatten into the
-                /// parent token.
-                pub fn flat(parser: Parser) Parser {
-                    const shim = struct {
-                        fn flatParser(ctx: Context, input: []const Char) Error!Result {
-                            const res = try parser(ctx, input);
-                            if (!res.matched()) return res;
-                            return switch (res.tok.ok.value) {
-                                .list => |list| .initOk(.{
-                                    .tag = res.tok.ok.tag,
-                                    .value = .{ .flat = list },
-                                }, res.rest),
-                                else => res,
-                            };
-                        }
-                    };
-                    return shim.flatParser;
-                }
-
-                /// Fail unless `parser` succeeds _and_ moves forwards in the text.
-                /// This is useful to wrap any composition of `zeroOrMore` parsers
-                /// to ensure that at least one of them made progress.
-                pub fn advances(parser: Parser) Parser {
-                    const shim = struct {
-                        fn advancesParser(ctx: Context, input: []const Char) Error!Result {
-                            const res = try parser(ctx, input);
-                            if (res.matched() and input.len == res.rest.len) {
-                                res.deinit(ctx);
-                                return .initFailHere(input);
-                            }
+                fn altParser(ctx: Context, input: []const Char) Error!Result {
+                    var hwm = input;
+                    inline for (parsers) |parser| {
+                        const res = try parser(ctx, input);
+                        if (res.matched())
                             return res;
-                        }
-                    };
-                    return shim.advancesParser;
-                }
+                        hwm = furthest(hwm, res.tok.fail);
+                    }
 
-                /// If the result is a single element `.list` lower the result to its first
-                /// element.
-                pub fn lower(parser: Parser) Parser {
-                    const shim = struct {
-                        fn lowerParser(ctx: Context, input: []const Char) Error!Result {
-                            const res = try parser(ctx, input);
-                            if (res.matched()) {
-                                switch (res.tok.ok.value) {
-                                    .nothing, .slice => {},
-                                    .flat, .list => |list| {
-                                        if (list.len == 1) {
-                                            defer res.deinitShallow(ctx);
-                                            return .initOk(list[0], res.rest);
-                                        }
-                                    },
-                                }
-                            }
-                            return res;
-                        }
-                    };
-                    return shim.lowerParser;
-                }
-
-                /// If `lower_parser` succeeds call `upper_parser` on the matched text.
-                /// If `upper_parser` succeeds and consumes all of the text matched by
-                /// `lower_parser` return its result otherwise return the result from
-                /// `lower_parser`.
-                pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
-                    const shim = struct {
-                        fn refineParser(ctx: Context, input: []const Char) Error!Result {
-                            const lres = try lower_parser(ctx, input);
-                            errdefer lres.deinit(ctx);
-
-                            if (!lres.matched())
-                                return lres;
-
-                            const consumed: usize = input.len - lres.rest.len;
-                            var ures = try left(upper_parser, eof())(ctx, input[0..consumed]);
-
-                            if (!ures.matched())
-                                return lres;
-
-                            defer lres.deinit(ctx);
-                            ures.rest = lres.rest; // TODO surely redundant?
-                            return ures;
-                        }
-                    };
-                    return shim.refineParser;
-                }
-
-                /// Call a parser from `field_name` in the context. This makes it possible
-                /// to create recursive parsers.
-                pub fn recurse(field_name: []const Char) Parser {
-                    const shim = struct {
-                        fn recurseParser(ctx: Context, input: []const Char) Error!Result {
-                            const parser = @field(ctx, field_name);
-                            return parser(ctx, input);
-                        }
-                    };
-                    return shim.recurseParser;
+                    return .initFail(hwm, input);
                 }
             };
+            return shim.altParser;
+        }
+
+        /// Try `parsers` in sequence returning a `.list` of their results if they
+        /// all succeed otherwise fail.
+        pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
+            const shim = struct {
+                fn seqParser(ctx: Context, input: []const Char) Error!Result {
+                    var list: Token.ArrayList = .empty;
+                    errdefer Token.deinitArrayList(&list, ctx);
+                    var tail = input;
+                    inline for (parsers) |parser| {
+                        const res = try parser(ctx, tail);
+                        if (!res.matched()) {
+                            Token.deinitArrayList(&list, ctx);
+                            return .initFail(res.tok.fail, input);
+                        }
+                        tail = res.rest;
+                        try res.tok.ok.appendToArrayList(ctx, &list);
+                    }
+
+                    return .initOk(try .initArrayList(ctx, tag, &list), tail);
+                }
+            };
+            return shim.seqParser;
+        }
+
+        /// If `left_parser` and `right_parser` succeed in sequence return the left
+        /// result and discard the right.
+        pub fn left(left_parser: Parser, right_parser: Parser) Parser {
+            const shim = struct {
+                fn leftParser(ctx: Context, input: []const Char) Error!Result {
+                    const lres = try left_parser(ctx, input);
+                    errdefer lres.deinit(ctx);
+                    if (!lres.matched()) return lres;
+                    const rres = try discard(right_parser)(ctx, lres.rest);
+                    if (!rres.matched()) {
+                        lres.deinit(ctx);
+                        return .initFail(rres.tok.fail, input);
+                    }
+                    return .initOk(lres.tok.ok, rres.rest);
+                }
+            };
+            return shim.leftParser;
+        }
+
+        /// If `left_parser` and `right_parser` succeed in sequence return the right
+        /// result and discard the left.
+        pub fn right(left_parser: Parser, right_parser: Parser) Parser {
+            const shim = struct {
+                fn rightParser(ctx: Context, input: []const Char) Error!Result {
+                    const lres = try discard(left_parser)(ctx, input);
+                    if (!lres.matched()) return lres;
+                    const rres = try right_parser(ctx, lres.rest);
+                    if (!rres.matched()) return .initFail(rres.tok.fail, input);
+                    return rres;
+                }
+            };
+            return shim.rightParser;
+        }
+
+        /// If `left_parser`, `parser` and `right_parser` succeed in sequence return
+        /// the result of `parser` and discard the left and right results.
+        pub fn between(
+            left_parser: Parser,
+            parser: Parser,
+            right_parser: Parser,
+        ) Parser {
+            return left(right(left_parser, parser), right_parser);
+        }
+
+        /// Apply a parser until it fails or reaches `quantifier.max` matches and return
+        /// the result as a `.list` token.
+        pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
+            assert(quantifier.min <= quantifier.max);
+            const shim = struct {
+                fn manyParser(ctx: Context, input: []const Char) Error!Result {
+                    var list: Token.ArrayList = .empty;
+                    errdefer Token.deinitArrayList(&list, ctx);
+                    var tail = input;
+                    while (list.items.len < quantifier.max) {
+                        const res = try advances(parser)(ctx, tail);
+                        if (!res.matched()) {
+                            if (list.items.len >= quantifier.min)
+                                break;
+                            Token.deinitArrayList(&list, ctx);
+                            return .initFail(res.tok.fail, input);
+                        }
+                        tail = res.rest;
+                        try res.tok.ok.appendToArrayList(ctx, &list);
+                    }
+                    return .initOk(try .initArrayList(ctx, tag, &list), tail);
+                }
+            };
+            return shim.manyParser;
+        }
+
+        pub fn optional(parser: Parser) Parser {
+            const shim = struct {
+                fn optionalParser(ctx: Context, input: []const Char) Error!Result {
+                    const res = try parser(ctx, input);
+                    if (res.matched()) return res;
+                    return .initOk(.nothing, input);
+                }
+            };
+            return shim.optionalParser;
+        }
+
+        pub fn map(parser: Parser, mapper: Mapper) Parser {
+            const shim = struct {
+                fn mapParser(ctx: Context, input: []const Char) Error!Result {
+                    return try mapper(ctx, input, try parser(ctx, input));
+                }
+            };
+            return shim.mapParser;
+        }
+
+        pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
+            const shim = switch (config.phase) {
+                .comp => struct {
+                    fn mapParser(ctx: Context, input: []const Char) Error!Result {
+                        return try mapper(ctx, input, try parser(ctx, input));
+                    }
+                },
+                .run => struct {
+                    fn mapParser(ctx: Context, input: []const Char) Error!Result {
+                        var arena = std.heap.ArenaAllocator.init(ctx.allocator);
+                        defer arena.deinit();
+                        var tmp_ctx: Context = ctx;
+                        tmp_ctx.allocator = arena.allocator();
+                        return try mapper(ctx, input, try parser(tmp_ctx, input));
+                    }
+                },
+            };
+            return shim.mapParser;
+        }
+
+        /// If `parser` succeeds, discard its result and return a `.nothing` token
+        /// in its place. At any level of nesting other than the root of the AST
+        /// `.nothing` tokens are discarded and won't appear in the result.
+        pub fn discard(parser: Parser) Parser {
+            const shim = struct {
+                fn disardMapper(
+                    _: Context,
+                    input: []const Char,
+                    res: Result,
+                ) Error!Result {
+                    if (!res.matched()) return .initFail(res.tok.fail, input);
+                    return .initOk(.nothing, res.rest);
+                }
+            };
+
+            return mapTemp(parser, shim.disardMapper);
+        }
+
+        /// If `parser` succeeds return a `.slice` token containing the whole of the
+        /// matched text, tagged with `tag`.
+        pub fn span(tag: Tag, parser: Parser) Parser {
+            const shim = struct {
+                fn spanMapper(
+                    _: Context,
+                    input: []const Char,
+                    res: Result,
+                ) Error!Result {
+                    if (!res.matched()) return .initFail(res.tok.fail, input);
+                    const consumed: usize = input.len - res.rest.len;
+                    return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
+                }
+            };
+
+            return mapTemp(parser, shim.spanMapper);
+        }
+
+        /// If `parser` returns a `.list` modify it so that it will flatten into the
+        /// parent token.
+        pub fn flat(parser: Parser) Parser {
+            const shim = struct {
+                fn flatParser(ctx: Context, input: []const Char) Error!Result {
+                    const res = try parser(ctx, input);
+                    if (!res.matched()) return res;
+                    return switch (res.tok.ok.value) {
+                        .list => |list| .initOk(.{
+                            .tag = res.tok.ok.tag,
+                            .value = .{ .flat = list },
+                        }, res.rest),
+                        else => res,
+                    };
+                }
+            };
+            return shim.flatParser;
+        }
+
+        /// Fail unless `parser` succeeds _and_ moves forwards in the text.
+        /// This is useful to wrap any composition of `zeroOrMore` parsers
+        /// to ensure that at least one of them made progress.
+        pub fn advances(parser: Parser) Parser {
+            const shim = struct {
+                fn advancesParser(ctx: Context, input: []const Char) Error!Result {
+                    const res = try parser(ctx, input);
+                    if (res.matched() and input.len == res.rest.len) {
+                        res.deinit(ctx);
+                        return .initFailHere(input);
+                    }
+                    return res;
+                }
+            };
+            return shim.advancesParser;
+        }
+
+        /// If the result is a single element `.list` lower the result to its first
+        /// element.
+        pub fn lower(parser: Parser) Parser {
+            const shim = struct {
+                fn lowerParser(ctx: Context, input: []const Char) Error!Result {
+                    const res = try parser(ctx, input);
+                    if (res.matched()) {
+                        switch (res.tok.ok.value) {
+                            .nothing, .slice => {},
+                            .flat, .list => |list| {
+                                if (list.len == 1) {
+                                    defer res.deinitShallow(ctx);
+                                    return .initOk(list[0], res.rest);
+                                }
+                            },
+                        }
+                    }
+                    return res;
+                }
+            };
+            return shim.lowerParser;
+        }
+
+        /// If `lower_parser` succeeds call `upper_parser` on the matched text.
+        /// If `upper_parser` succeeds and consumes all of the text matched by
+        /// `lower_parser` return its result otherwise return the result from
+        /// `lower_parser`.
+        pub fn refine(lower_parser: Parser, upper_parser: Parser) Parser {
+            const shim = struct {
+                fn refineParser(ctx: Context, input: []const Char) Error!Result {
+                    const lres = try lower_parser(ctx, input);
+                    errdefer lres.deinit(ctx);
+
+                    if (!lres.matched())
+                        return lres;
+
+                    const consumed: usize = input.len - lres.rest.len;
+                    var ures = try left(upper_parser, eof())(ctx, input[0..consumed]);
+
+                    if (!ures.matched())
+                        return lres;
+
+                    defer lres.deinit(ctx);
+                    ures.rest = lres.rest; // TODO surely redundant?
+                    return ures;
+                }
+            };
+            return shim.refineParser;
+        }
+
+        /// Call a parser from `field_name` in the context. This makes it possible
+        /// to create recursive parsers.
+        pub fn recurse(field_name: []const Char) Parser {
+            const shim = struct {
+                fn recurseParser(ctx: Context, input: []const Char) Error!Result {
+                    const parser = @field(ctx, field_name);
+                    return parser(ctx, input);
+                }
+            };
+            return shim.recurseParser;
         }
     };
 }
@@ -796,14 +759,16 @@ const TestTag = enum(u8) {
     REST,
 };
 
-const TestSpace = Space(u8);
-const TestToken = TestSpace.TokenType(TestTag, .run);
-const TestResult = TestSpace.ResultType(TestToken);
+const test_config: ZpcConfig = .{
+    .Tag = TestTag,
+};
 
+const TestResult = ResultType(test_config);
 const TestContext = struct {
     allocator: Allocator,
-    expr: *const TestSpace.ParserTypeForResult(@This(), TestResult) = undefined,
+    expr: *const ParserType(test_config, @This()) = undefined,
 };
+const P = Zpc(test_config, TestContext);
 
 fn checkAndConsume(
     ctx: TestContext,
@@ -815,7 +780,6 @@ fn checkAndConsume(
 }
 
 test "always" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlways = P.always(.FOO, "foo");
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -827,7 +791,6 @@ test "always" {
 }
 
 test "eof" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseEof = P.eof();
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -845,7 +808,6 @@ test "eof" {
 }
 
 test "rest" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAllDigits = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.rest(.REST),
@@ -863,7 +825,6 @@ test "rest" {
 }
 
 test "keyword" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseHello = P.keyword(.HELLO, "Hello");
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -888,7 +849,6 @@ test "keyword" {
 }
 
 test "tagName" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseHello = P.tagName(.HELLO);
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -901,7 +861,6 @@ test "tagName" {
 }
 
 test "takeWhile" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(
         .DIGIT,
         .range(1, 2),
@@ -935,7 +894,6 @@ test "takeWhile" {
 }
 
 test "alt" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlt = P.alt(&.{
         P.keyword(.HELLO, "Hello"),
         P.keyword(.FOO, "Foo"),
@@ -965,7 +923,6 @@ test "alt" {
 }
 
 test "seq" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlphaNum = P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
@@ -986,7 +943,6 @@ test "seq" {
 }
 
 test "left" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseLeft = P.left(
         P.keyword(.FOO, "Foo"),
         P.keyword(.BAR, "Bar"),
@@ -1014,7 +970,6 @@ test "left" {
 }
 
 test "right" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseRight = P.right(
         P.keyword(.FOO, "Foo"),
         P.keyword(.BAR, "Bar"),
@@ -1042,7 +997,6 @@ test "right" {
 }
 
 test "between" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseBetween = P.between(
         P.literal("("),
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
@@ -1070,7 +1024,6 @@ test "between" {
 }
 
 test "many" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseFooBar = P.many(
         .MULTI,
         .range(2, 3),
@@ -1107,7 +1060,6 @@ test "many" {
 }
 
 test "optional" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseMaybeNumber = P.optional(P.takeWhile(
         .DIGIT,
         .oneOrMore,
@@ -1129,7 +1081,6 @@ test "optional" {
 }
 
 test "discard" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseHello = P.discard(P.keyword(.HELLO, "Hello"));
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1148,7 +1099,6 @@ test "discard" {
 }
 
 test "span" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseAlphaNum = P.span(.ALNUM, P.seq(.MULTI, &.{
         P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
@@ -1162,7 +1112,6 @@ test "span" {
 }
 
 test "flat" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
     const parseFlat = P.seq(.ARRAY, &.{
         parseDigits,
@@ -1197,7 +1146,6 @@ test "flat" {
 }
 
 test "advances" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
     const parseAdvances = P.advances(parseDigits);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1216,7 +1164,6 @@ test "advances" {
 }
 
 test "lower" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseLower = P.lower(P.many(.MULTI, .oneOrMore, P.keyword(.FOO, "Foo")));
     const parseFlatLower = P.flat(parseLower);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1245,7 +1192,6 @@ test "lower" {
 }
 
 test "refine" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseKeyword = P.refine(
         P.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
         P.alt(&.{
@@ -1275,7 +1221,6 @@ test "refine" {
 }
 
 test "recurse" {
-    const P = TestSpace.Parsers(TestContext, TestTag);
     const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
     const skipSpace = P.takeWhile(P.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
 
@@ -1346,11 +1291,12 @@ test "ComptimeParsers" {
     const Context = struct {};
 
     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
+    const config: ZpcConfig = .{ .Tag = Tag, .phase = .comp };
 
-    const P = TestSpace.ComptimeParsers(Context, Tag);
-    const parseAlphaNum = P.seq(.MULTI, &.{
-        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+    const CP = Zpc(config, Context);
+    const parseAlphaNum = CP.seq(.MULTI, &.{
+        CP.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        CP.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
     });
 
     const res = comptime blk: {
@@ -1358,7 +1304,7 @@ test "ComptimeParsers" {
         break :blk try parseAlphaNum(ctx, "123ABC.");
     };
 
-    try expectEqualDeep(P.Result.initOk(.initList(.MULTI, &.{
+    try expectEqualDeep(CP.Result.initOk(.initList(.MULTI, &.{
         .initSlice(.DIGIT, "123"),
         .initSlice(.ALPHA, "ABC"),
     }), "."), res);

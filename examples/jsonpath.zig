@@ -6,7 +6,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const zpc = @import("zpc").Space(u8);
+const zpc = @import("zpc");
 
 const JsonPathTag = enum(u8) {
     NONE,
@@ -20,20 +20,22 @@ const JsonPathTag = enum(u8) {
     WILD,
 };
 
+const config: zpc.ZpcConfig = .{ .Tag = JsonPathTag };
+
 const JsonPathContext = struct {
     allocator: Allocator,
 };
 
-const P = zpc.Parsers(JsonPathContext, JsonPathTag);
+const P = zpc.Zpc(config, JsonPathContext);
 
 fn makeJsonPathParser() P.Parser {
     const intParser = P.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);
 
     const charParser = P.alt(&.{
         P.left(P.literal("\\"), P.takeUntil(.NONE, .one, std.ascii.isControl)),
-        P.takeUntil(.NONE, .oneOrMore, zpc.predOr(
+        P.takeUntil(.NONE, .oneOrMore, P.predOr(
             std.ascii.isControl,
-            zpc.predSet("\"\\"),
+            P.predSet("\"\\"),
         )),
     });
 
@@ -51,8 +53,8 @@ fn makeJsonPathParser() P.Parser {
         P.literal("]"),
     );
 
-    const identFirstPred = zpc.predOr(std.ascii.isAlphabetic, zpc.predSet("$_"));
-    const identRestPred = zpc.predOr(identFirstPred, std.ascii.isDigit);
+    const identFirstPred = P.predOr(std.ascii.isAlphabetic, P.predSet("$_"));
+    const identRestPred = P.predOr(identFirstPred, std.ascii.isDigit);
 
     const identParser = P.span(.IDENT, P.left(
         P.takeWhile(.NONE, .one, identFirstPred),

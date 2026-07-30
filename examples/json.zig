@@ -6,7 +6,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const zpc = @import("zpc").Space(u8);
+const zpc = @import("zpc");
 
 const JsonTag = enum(u8) {
     NONE,
@@ -20,12 +20,15 @@ const JsonTag = enum(u8) {
     KEYVALUE,
 };
 
+const config: zpc.ZpcConfig = .{ .Tag = JsonTag };
+
 const JsonContext = struct {
     allocator: Allocator,
-    jsonParser: *const zpc.ParserType(@This(), JsonTag),
+    jsonParser: *const zpc.ParserType(config, @This()),
 };
 
-const P = zpc.Parsers(JsonContext, JsonTag);
+const P = zpc.Zpc(config, JsonContext);
+
 const skipSpace = P.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
 
 fn makeListParser(
@@ -65,8 +68,8 @@ fn makeJsonParser() P.Parser {
     }));
 
     const charParser = P.alt(&.{
-        P.left(P.literal("\\"), P.takeWhile(.NONE, .one, zpc.predAny())),
-        P.takeUntil(.NONE, .oneOrMore, zpc.predSet("\"\\")),
+        P.left(P.literal("\\"), P.takeWhile(.NONE, .one, P.predAny())),
+        P.takeUntil(.NONE, .oneOrMore, P.predSet("\"\\")),
     });
 
     const stringParser = P.between(
