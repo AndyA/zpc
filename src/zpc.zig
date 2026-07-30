@@ -140,7 +140,7 @@ pub fn Space(Item: type) type {
                     .comp => ct.ComptimeArrayList(Self),
                     .run => std.ArrayList(Self),
                 };
-                pub const NOP: Tag = @fromBackingInt(@intCast(0));
+                pub const NOP: Tag = @fromBackingInt(0);
 
                 pub const nothing: Self = .{ .tag = NOP, .value = .{ .nothing = {} } };
 
