@@ -30,11 +30,11 @@ fn makeJsonPathParser() P.Parser {
     const intParser = P.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);
 
     const charParser = P.alt(&.{
-        P.left(P.literal("\\"), P.takeWhile(.NONE, .one, zpc.predNot(std.ascii.isControl))),
-        P.takeWhile(.NONE, .oneOrMore, zpc.predNot(zpc.predOr(
+        P.left(P.literal("\\"), P.takeUntil(.NONE, .one, std.ascii.isControl)),
+        P.takeUntil(.NONE, .oneOrMore, zpc.predOr(
             std.ascii.isControl,
             zpc.predSet("\"\\"),
-        ))),
+        )),
     });
 
     const stringParser = P.between(
