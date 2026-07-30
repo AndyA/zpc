@@ -9,8 +9,6 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const ct = @import("zpc/comptime.zig");
-
 pub const Quantifier = @import("zpc/Quantifier.zig");
 pub const Phase = enum { comp, run };
 pub const Error = error{OutOfMemory};
@@ -27,9 +25,11 @@ pub const Config = struct {
 };
 
 pub fn TokenType(config: Config) type {
+    const ct = @import("zpc/comptime.zig");
     const Char = config.Char;
     const Context = config.Context;
     const Tag = config.Tag;
+
     return struct {
         const Self = @This();
         pub const ArrayList = switch (config.phase) {
