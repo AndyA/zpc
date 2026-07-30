@@ -29,8 +29,7 @@ fn makeCsvParser() P.Parser {
         P.literal("\""),
     );
 
-    const validBare = zpc.predNot(zpc.predSet(",\r\n"));
-    const bareParser = P.span(.BARE, P.takeWhile(.NONE, .zeroOrMore, validBare));
+    const bareParser = P.span(.BARE, P.takeUntil(.NONE, .zeroOrMore, zpc.predSet(",\r\n")));
 
     const valueParser = P.right(skipSpace, P.alt(&.{ stringParser, bareParser }));
 

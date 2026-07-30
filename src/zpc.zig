@@ -502,6 +502,12 @@ pub fn Space(Item: type) type {
                     return shim.takeWhileParser;
                 }
 
+                /// Consume from input until `pred` returns true. Fails if the number
+                /// of matched chars falls outside the bounds of `quantifier`.
+                pub fn takeUntil(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
+                    return takeWhile(tag, quantifier, predNot(pred));
+                }
+
                 /// Try each of `parsers` in turn returning the result of the first
                 /// that succeeds. Fail if none succeeds.
                 pub fn alt(parsers: []const *const Parser) Parser {
