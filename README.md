@@ -1,5 +1,7 @@
 # Zig Parser Compiler
 
+[Documentation](https://zpc.hexten.net/)
+
 ## Negatives
 
 - not as fast as SIMD
