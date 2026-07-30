@@ -27,71 +27,71 @@ const JsonContext = struct {
     jsonParser: *const zpc.ParserType(config),
 };
 
-const P = zpc.Zpc(JsonContext.config);
+const C = zpc.Zpc(JsonContext.config);
 
-const skipSpace = P.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
+const skipSpace = C.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
 
 fn makeListParser(
     tag: JsonTag,
-    openParser: P.Parser,
-    valueParser: P.Parser,
-    closeParser: P.Parser,
-) P.Parser {
-    return P.between(
+    openParser: C.Parser,
+    valueParser: C.Parser,
+    closeParser: C.Parser,
+) C.Parser {
+    return C.between(
         openParser,
-        P.many(tag, .zeroOrOne, P.flat(P.seq(.NONE, &.{
+        C.many(tag, .zeroOrOne, C.flat(C.seq(.NONE, &.{
             valueParser,
-            P.flat(P.many(.NONE, .zeroOrMore, P.right(
-                P.right(skipSpace, P.literal(",")),
+            C.flat(C.many(.NONE, .zeroOrMore, C.right(
+                C.right(skipSpace, C.literal(",")),
                 valueParser,
             ))),
         }))),
-        P.right(skipSpace, closeParser),
+        C.right(skipSpace, closeParser),
     );
 }
 
-fn makeJsonParser() P.Parser {
-    const intParser = P.takeWhile(.NONE, .oneOrMore, std.ascii.isDigit);
+fn makeJsonParser() C.Parser {
+    const intParser = C.takeWhile(.NONE, .oneOrMore, std.ascii.isDigit);
 
     const posParser =
-        P.left(
-            P.left(intParser, P.optional(P.left(P.literal("."), intParser))),
-            P.optional(P.left(
-                P.alt(&.{ P.literal("e"), P.literal("E") }),
-                P.left(P.optional(P.alt(&.{ P.literal("+"), P.literal("-") })), intParser),
+        C.left(
+            C.left(intParser, C.optional(C.left(C.literal("."), intParser))),
+            C.optional(C.left(
+                C.alt(&.{ C.literal("e"), C.literal("E") }),
+                C.left(C.optional(C.alt(&.{ C.literal("+"), C.literal("-") })), intParser),
             )),
         );
 
-    const numParser = P.span(.NUMBER, P.alt(&.{
-        P.left(P.literal("-"), posParser),
+    const numParser = C.span(.NUMBER, C.alt(&.{
+        C.left(C.literal("-"), posParser),
         posParser,
     }));
 
-    const charParser = P.alt(&.{
-        P.left(P.literal("\\"), P.takeWhile(.NONE, .one, P.any_())),
-        P.takeUntil(.NONE, .oneOrMore, P.set_("\"\\")),
+    const charParser = C.alt(&.{
+        C.left(C.literal("\\"), C.takeWhile(.NONE, .one, C.any_())),
+        C.takeUntil(.NONE, .oneOrMore, C.set_("\"\\")),
     });
 
-    const stringParser = P.between(
-        P.literal("\""),
-        P.span(.STRING, P.many(.NONE, .zeroOrMore, charParser)),
-        P.literal("\""),
+    const stringParser = C.between(
+        C.literal("\""),
+        C.span(.STRING, C.many(.NONE, .zeroOrMore, charParser)),
+        C.literal("\""),
     );
 
-    const selfParser = P.recurse("jsonParser");
+    const selfParser = C.recurse("jsonParser");
 
-    const kvParser = P.seq(.KEYVALUE, &.{
-        P.right(skipSpace, stringParser),
-        P.right(P.right(skipSpace, P.literal(":")), selfParser),
+    const kvParser = C.seq(.KEYVALUE, &.{
+        C.right(skipSpace, stringParser),
+        C.right(C.right(skipSpace, C.literal(":")), selfParser),
     });
 
-    const objectParser = makeListParser(.OBJECT, P.literal("{"), kvParser, P.literal("}"));
-    const arrayParser = makeListParser(.ARRAY, P.literal("["), selfParser, P.literal("]"));
+    const objectParser = makeListParser(.OBJECT, C.literal("{"), kvParser, C.literal("}"));
+    const arrayParser = makeListParser(.ARRAY, C.literal("["), selfParser, C.literal("]"));
 
-    const jsonParser = P.right(skipSpace, P.alt(&.{
-        P.keyword(.FALSE, "false"),
-        P.keyword(.TRUE, "true"),
-        P.keyword(.NULL, "null"),
+    const jsonParser = C.right(skipSpace, C.alt(&.{
+        C.keyword(.FALSE, "false"),
+        C.keyword(.TRUE, "true"),
+        C.keyword(.NULL, "null"),
         stringParser,
         objectParser,
         arrayParser,

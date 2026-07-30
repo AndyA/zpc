@@ -38,42 +38,42 @@ const Context = struct {
     expr: *const zpc.ParserType(config),
 };
 
-const P = zpc.Zpc(Context.config);
+const C = zpc.Zpc(Context.config);
 
-const skipSpace = P.takeWhile(.N, .zeroOrMore, std.ascii.isWhitespace);
+const skipSpace = C.takeWhile(.N, .zeroOrMore, std.ascii.isWhitespace);
 
-fn makeBinOpParser(valueParser: P.Parser, opParser: P.Parser) P.Parser {
-    return P.lower(P.seq(.BINOPS, &.{ valueParser, P.flat(
-        P.many(.N, .zeroOrMore, P.seq(.BINOP, &.{
-            P.right(skipSpace, opParser), valueParser,
+fn makeBinOpParser(valueParser: C.Parser, opParser: C.Parser) C.Parser {
+    return C.lower(C.seq(.BINOPS, &.{ valueParser, C.flat(
+        C.many(.N, .zeroOrMore, C.seq(.BINOP, &.{
+            C.right(skipSpace, opParser), valueParser,
         })),
     ) }));
 }
 
-fn makeExpressionParser() P.Parser {
-    const k = P.keyword;
-    const t = P.tagName;
-    const l = P.literal;
-    const intParser = P.takeWhile(.INT, .oneOrMore, std.ascii.isDigit);
+fn makeExpressionParser() C.Parser {
+    const k = C.keyword;
+    const t = C.tagName;
+    const l = C.literal;
+    const intParser = C.takeWhile(.INT, .oneOrMore, std.ascii.isDigit);
 
-    const identFirstPred = P.or_(std.ascii.isAlphabetic, P.equal_('_'));
-    const identRestPred = P.or_(identFirstPred, std.ascii.isDigit);
+    const identFirstPred = C.or_(std.ascii.isAlphabetic, C.equal_('_'));
+    const identRestPred = C.or_(identFirstPred, std.ascii.isDigit);
 
-    const identParser = P.span(.IDENT, P.left(
-        P.takeWhile(.N, .one, identFirstPred),
-        P.takeWhile(.N, .zeroOrMore, identRestPred),
+    const identParser = C.span(.IDENT, C.left(
+        C.takeWhile(.N, .one, identFirstPred),
+        C.takeWhile(.N, .zeroOrMore, identRestPred),
     ));
 
-    const atomParser = P.right(skipSpace, P.alt(&.{
-        P.between(l("("), P.recurse("expr"), P.right(skipSpace, l(")"))),
+    const atomParser = C.right(skipSpace, C.alt(&.{
+        C.between(l("("), C.recurse("expr"), C.right(skipSpace, l(")"))),
         intParser,
         identParser,
     }));
 
-    const unaryParser = P.alt(&.{
-        P.seq(.UNOP, &.{ P.many(.UNOPS, .oneOrMore, P.right(
+    const unaryParser = C.alt(&.{
+        C.seq(.UNOP, &.{ C.many(.UNOPS, .oneOrMore, C.right(
             skipSpace,
-            P.alt(&.{
+            C.alt(&.{
                 k(.NEG, "-"),
                 t(.@"~"),
                 t(.@"!"),
@@ -84,7 +84,7 @@ fn makeExpressionParser() P.Parser {
 
     const mulDivParser = makeBinOpParser(
         unaryParser,
-        P.alt(&.{
+        C.alt(&.{
             t(.@"*"),
             t(.@"/"),
             t(.@"%"),
@@ -93,13 +93,13 @@ fn makeExpressionParser() P.Parser {
 
     const addSubParser = makeBinOpParser(
         mulDivParser,
-        P.alt(&.{
+        C.alt(&.{
             t(.@"+"),
             t(.@"-"),
         }),
     );
 
-    const cmpParser = makeBinOpParser(addSubParser, P.alt(&.{
+    const cmpParser = makeBinOpParser(addSubParser, C.alt(&.{
         t(.@"!="),
         k(.@"!=", "<>"),
         t(.@"<="),
@@ -117,7 +117,7 @@ fn boolInt(b: bool) i64 {
     return if (b) 1 else 0;
 }
 
-fn eval(token: P.Token) !i64 {
+fn eval(token: C.Token) !i64 {
     return eval: switch (token.tag) {
         .INT => try std.fmt.parseInt(i64, token.value.slice, 10),
         .UNOP => {
@@ -163,7 +163,7 @@ fn eval(token: P.Token) !i64 {
 
 pub fn main(init: std.process.Init) !void {
     const exprParser = makeExpressionParser();
-    const fullParser = P.left(exprParser, P.left(skipSpace, P.eof()));
+    const fullParser = C.left(exprParser, C.left(skipSpace, C.eof()));
     const ctx: Context = .{ .allocator = init.gpa, .expr = exprParser };
 
     const expressions: []const []const u8 = &.{

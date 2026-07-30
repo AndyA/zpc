@@ -12,57 +12,57 @@ const CsvContext = struct {
     allocator: Allocator,
 };
 
-const P = zpc.Zpc(CsvContext.config);
+const C = zpc.Zpc(CsvContext.config);
 
-fn makeCsvParser() P.Parser {
+fn makeCsvParser() C.Parser {
     // Skip horizontal whitespace
-    const skipSpace = P.takeWhile(.NONE, .zeroOrMore, P.and_(
+    const skipSpace = C.takeWhile(.NONE, .zeroOrMore, C.and_(
         std.ascii.isWhitespace,
-        P.not_(P.set_("\r\n")),
+        C.not_(C.set_("\r\n")),
     ));
 
-    const charParser = P.alt(&.{
-        P.literal("\"\""),
-        P.takeUntil(.NONE, .oneOrMore, P.equal_('\"')),
+    const charParser = C.alt(&.{
+        C.literal("\"\""),
+        C.takeUntil(.NONE, .oneOrMore, C.equal_('\"')),
     });
 
-    const stringParser = P.between(
-        P.literal("\""),
-        P.span(.QUOTED, P.many(.NONE, .zeroOrMore, charParser)),
-        P.literal("\""),
+    const stringParser = C.between(
+        C.literal("\""),
+        C.span(.QUOTED, C.many(.NONE, .zeroOrMore, charParser)),
+        C.literal("\""),
     );
 
-    const bareParser = P.span(.BARE, P.takeUntil(.NONE, .zeroOrMore, P.set_(",\r\n")));
+    const bareParser = C.span(.BARE, C.takeUntil(.NONE, .zeroOrMore, C.set_(",\r\n")));
 
-    const valueParser = P.right(skipSpace, P.alt(&.{ stringParser, bareParser }));
+    const valueParser = C.right(skipSpace, C.alt(&.{ stringParser, bareParser }));
 
-    const rowParser = P.seq(.ROW, &.{
+    const rowParser = C.seq(.ROW, &.{
         valueParser,
-        P.flat(P.many(.NONE, .zeroOrMore, P.right(
-            P.right(skipSpace, P.literal(",")),
+        C.flat(C.many(.NONE, .zeroOrMore, C.right(
+            C.right(skipSpace, C.literal(",")),
             valueParser,
         ))),
     });
 
-    const eolParser = P.alt(&.{
-        P.literal("\n"),
-        P.literal("\r\n"),
-        P.literal("\r"),
+    const eolParser = C.alt(&.{
+        C.literal("\n"),
+        C.literal("\r\n"),
+        C.literal("\r"),
     });
 
-    const csvParser = P.seq(.CSV, &.{
+    const csvParser = C.seq(.CSV, &.{
         rowParser,
-        P.flat(P.many(.NONE, .zeroOrMore, P.right(
-            P.right(skipSpace, eolParser),
+        C.flat(C.many(.NONE, .zeroOrMore, C.right(
+            C.right(skipSpace, eolParser),
             rowParser,
         ))),
     });
 
-    return P.left(
+    return C.left(
         csvParser,
-        P.left(
-            P.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace),
-            P.eof(),
+        C.left(
+            C.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace),
+            C.eof(),
         ),
     );
 }

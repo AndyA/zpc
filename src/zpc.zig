@@ -298,6 +298,70 @@ pub fn Zpc(config: Config) type {
         pub const Mapper = MapperType(config);
         pub const Predicate = PredicateType(config);
 
+        pub const P = struct {
+            /// A predicate that matches any char
+            pub fn any_() Predicate {
+                const shim = struct {
+                    fn pred(_: Char) bool {
+                        return true;
+                    }
+                };
+                return shim.pred;
+            }
+
+            /// A predicate that is the (short circuited) AND of two other
+            /// predicates
+            pub fn and_(a: Predicate, b: Predicate) Predicate {
+                const shim = struct {
+                    fn pred(char: Char) bool {
+                        return a(char) and b(char);
+                    }
+                };
+                return shim.pred;
+            }
+
+            /// A predicate that is the (short circuited) OR of two other
+            /// predicates
+            pub fn or_(a: Predicate, b: Predicate) Predicate {
+                const shim = struct {
+                    fn pred(char: Char) bool {
+                        return a(char) or b(char);
+                    }
+                };
+                return shim.pred;
+            }
+
+            /// A predicate that negates the supplied predicate
+            pub fn not_(p: Predicate) Predicate {
+                const shim = struct {
+                    fn pred(char: Char) bool {
+                        return !p(char);
+                    }
+                };
+                return shim.pred;
+            }
+
+            /// A predicate that is true if the item equals `want`
+            pub fn equal_(want: Char) Predicate {
+                const shim = struct {
+                    fn pred(char: Char) bool {
+                        return char == want;
+                    }
+                };
+                return shim.pred;
+            }
+
+            /// A predicate that tests whether the item is in `charset`
+            pub fn set_(charset: []const Char) Predicate {
+                const shim = struct {
+                    fn pred(char: Char) bool {
+                        return std.mem.containsAtLeastScalar(config.Char, charset, char, 1);
+                    }
+                };
+                return shim.pred;
+            }
+        };
+
         /// A predicate that matches any char
         pub fn any_() Predicate {
             const shim = struct {
@@ -771,7 +835,7 @@ const TestContext = struct {
 };
 
 const TestResult = ResultType(TestContext.config);
-const P = Zpc(TestContext.config);
+const C = Zpc(TestContext.config);
 
 fn checkAndConsume(
     ctx: TestContext,
@@ -783,7 +847,7 @@ fn checkAndConsume(
 }
 
 test "always" {
-    const parseAlways = P.always(.FOO, "foo");
+    const parseAlways = C.always(.FOO, "foo");
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
     try checkAndConsume(
@@ -794,7 +858,7 @@ test "always" {
 }
 
 test "eof" {
-    const parseEof = P.eof();
+    const parseEof = C.eof();
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
     try checkAndConsume(
@@ -811,9 +875,9 @@ test "eof" {
 }
 
 test "rest" {
-    const parseAllDigits = P.seq(.MULTI, &.{
-        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        P.rest(.REST),
+    const parseAllDigits = C.seq(.MULTI, &.{
+        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        C.rest(.REST),
     });
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
     try checkAndConsume(
@@ -828,7 +892,7 @@ test "rest" {
 }
 
 test "keyword" {
-    const parseHello = P.keyword(.HELLO, "Hello");
+    const parseHello = C.keyword(.HELLO, "Hello");
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -852,7 +916,7 @@ test "keyword" {
 }
 
 test "tagName" {
-    const parseHello = P.tagName(.HELLO);
+    const parseHello = C.tagName(.HELLO);
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -864,7 +928,7 @@ test "tagName" {
 }
 
 test "takeWhile" {
-    const parseDigits = P.takeWhile(
+    const parseDigits = C.takeWhile(
         .DIGIT,
         .range(1, 2),
         std.ascii.isDigit,
@@ -897,9 +961,9 @@ test "takeWhile" {
 }
 
 test "alt" {
-    const parseAlt = P.alt(&.{
-        P.keyword(.HELLO, "Hello"),
-        P.keyword(.FOO, "Foo"),
+    const parseAlt = C.alt(&.{
+        C.keyword(.HELLO, "Hello"),
+        C.keyword(.FOO, "Foo"),
     });
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -926,9 +990,9 @@ test "alt" {
 }
 
 test "seq" {
-    const parseAlphaNum = P.seq(.MULTI, &.{
-        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+    const parseAlphaNum = C.seq(.MULTI, &.{
+        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        C.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
     });
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -946,9 +1010,9 @@ test "seq" {
 }
 
 test "left" {
-    const parseLeft = P.left(
-        P.keyword(.FOO, "Foo"),
-        P.keyword(.BAR, "Bar"),
+    const parseLeft = C.left(
+        C.keyword(.FOO, "Foo"),
+        C.keyword(.BAR, "Bar"),
     );
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -973,9 +1037,9 @@ test "left" {
 }
 
 test "right" {
-    const parseRight = P.right(
-        P.keyword(.FOO, "Foo"),
-        P.keyword(.BAR, "Bar"),
+    const parseRight = C.right(
+        C.keyword(.FOO, "Foo"),
+        C.keyword(.BAR, "Bar"),
     );
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1000,10 +1064,10 @@ test "right" {
 }
 
 test "between" {
-    const parseBetween = P.between(
-        P.literal("("),
-        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        P.literal(")"),
+    const parseBetween = C.between(
+        C.literal("("),
+        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        C.literal(")"),
     );
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -1027,10 +1091,10 @@ test "between" {
 }
 
 test "many" {
-    const parseFooBar = P.many(
+    const parseFooBar = C.many(
         .MULTI,
         .range(2, 3),
-        P.alt(&.{ P.keyword(.FOO, "Foo"), P.keyword(.BAR, "Bar") }),
+        C.alt(&.{ C.keyword(.FOO, "Foo"), C.keyword(.BAR, "Bar") }),
     );
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -1063,7 +1127,7 @@ test "many" {
 }
 
 test "optional" {
-    const parseMaybeNumber = P.optional(P.takeWhile(
+    const parseMaybeNumber = C.optional(C.takeWhile(
         .DIGIT,
         .oneOrMore,
         std.ascii.isDigit,
@@ -1084,7 +1148,7 @@ test "optional" {
 }
 
 test "discard" {
-    const parseHello = P.discard(P.keyword(.HELLO, "Hello"));
+    const parseHello = C.discard(C.keyword(.HELLO, "Hello"));
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -1102,9 +1166,9 @@ test "discard" {
 }
 
 test "span" {
-    const parseAlphaNum = P.span(.ALNUM, P.seq(.MULTI, &.{
-        P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        P.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+    const parseAlphaNum = C.span(.ALNUM, C.seq(.MULTI, &.{
+        C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+        C.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
     }));
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
     try checkAndConsume(
@@ -1115,20 +1179,20 @@ test "span" {
 }
 
 test "flat" {
-    const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
-    const parseFlat = P.seq(.ARRAY, &.{
+    const parseDigits = C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
+    const parseFlat = C.seq(.ARRAY, &.{
         parseDigits,
-        P.flat(P.many(
-            P.Token.NOP,
+        C.flat(C.many(
+            C.Token.NOP,
             .zeroOrMore,
-            P.right(P.literal(","), parseDigits),
+            C.right(C.literal(","), parseDigits),
         )),
     });
 
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
     const expr = "1,2,3;";
-    const want: P.Result = .initOk(.initList(.ARRAY, &.{
+    const want: C.Result = .initOk(.initList(.ARRAY, &.{
         .initSlice(.DIGIT, "1"),
         .initSlice(.DIGIT, "2"),
         .initSlice(.DIGIT, "3"),
@@ -1149,8 +1213,8 @@ test "flat" {
 }
 
 test "advances" {
-    const parseDigits = P.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
-    const parseAdvances = P.advances(parseDigits);
+    const parseDigits = C.takeWhile(.DIGIT, .zeroOrMore, std.ascii.isDigit);
+    const parseAdvances = C.advances(parseDigits);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
     try checkAndConsume(
@@ -1167,8 +1231,8 @@ test "advances" {
 }
 
 test "lower" {
-    const parseLower = P.lower(P.many(.MULTI, .oneOrMore, P.keyword(.FOO, "Foo")));
-    const parseFlatLower = P.flat(parseLower);
+    const parseLower = C.lower(C.many(.MULTI, .oneOrMore, C.keyword(.FOO, "Foo")));
+    const parseFlatLower = C.flat(parseLower);
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
     try checkAndConsume(
@@ -1195,11 +1259,11 @@ test "lower" {
 }
 
 test "refine" {
-    const parseKeyword = P.refine(
-        P.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
-        P.alt(&.{
-            P.keyword(.FOO, "Foo"),
-            P.keyword(.BAR, "Bar"),
+    const parseKeyword = C.refine(
+        C.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic),
+        C.alt(&.{
+            C.keyword(.FOO, "Foo"),
+            C.keyword(.BAR, "Bar"),
         }),
     );
     const ctx: TestContext = .{ .allocator = std.testing.allocator };
@@ -1224,19 +1288,19 @@ test "refine" {
 }
 
 test "recurse" {
-    const parseDigits = P.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
-    const skipSpace = P.takeWhile(P.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
+    const parseDigits = C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
+    const skipSpace = C.takeWhile(C.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
 
-    const parseAtom = P.right(skipSpace, P.alt(&.{
-        P.between(P.literal("("), P.recurse("expr"), P.literal(")")),
+    const parseAtom = C.right(skipSpace, C.alt(&.{
+        C.between(C.literal("("), C.recurse("expr"), C.literal(")")),
         parseDigits,
     }));
 
     const parseTerm =
-        P.seq(.TERM, &.{
+        C.seq(.TERM, &.{
             parseAtom,
-            P.many(.MANY, .zeroOrMore, P.seq(.SEQ, &.{
-                P.right(skipSpace, P.alt(&.{ P.keyword(.PLUS, "+"), P.keyword(.MINUS, "-") })),
+            C.many(.MANY, .zeroOrMore, C.seq(.SEQ, &.{
+                C.right(skipSpace, C.alt(&.{ C.keyword(.PLUS, "+"), C.keyword(.MINUS, "-") })),
                 parseAtom,
             })),
         });
@@ -1258,7 +1322,7 @@ test "recurse" {
     );
 
     const expr = "(123 + 7) - 2 + 700;";
-    const want: P.Result = .initOk(.initList(.TERM, &.{
+    const want: C.Result = .initOk(.initList(.TERM, &.{
         .initList(.TERM, &.{
             .initSlice(.DIGIT, "123"),
             .initList(.MANY, &.{

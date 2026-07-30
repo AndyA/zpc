@@ -25,62 +25,62 @@ const JsonPathContext = struct {
     allocator: Allocator,
 };
 
-const P = zpc.Zpc(JsonPathContext.config);
+const C = zpc.Zpc(JsonPathContext.config);
 
-fn makeJsonPathParser() P.Parser {
-    const intParser = P.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);
+fn makeJsonPathParser() C.Parser {
+    const intParser = C.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);
 
-    const charParser = P.alt(&.{
-        P.left(P.literal("\\"), P.takeUntil(.NONE, .one, std.ascii.isControl)),
-        P.takeUntil(.NONE, .oneOrMore, P.or_(
+    const charParser = C.alt(&.{
+        C.left(C.literal("\\"), C.takeUntil(.NONE, .one, std.ascii.isControl)),
+        C.takeUntil(.NONE, .oneOrMore, C.or_(
             std.ascii.isControl,
-            P.set_("\"\\"),
+            C.set_("\"\\"),
         )),
     });
 
-    const stringParser = P.between(
-        P.literal("\""),
-        P.span(.STRING, P.many(.NONE, .zeroOrMore, charParser)),
-        P.literal("\""),
+    const stringParser = C.between(
+        C.literal("\""),
+        C.span(.STRING, C.many(.NONE, .zeroOrMore, charParser)),
+        C.literal("\""),
     );
 
-    const wildParser = P.keyword(.WILD, "*");
+    const wildParser = C.keyword(.WILD, "*");
 
-    const subscriptParser = P.between(
-        P.literal("["),
-        P.alt(&.{ wildParser, stringParser, intParser }),
-        P.literal("]"),
+    const subscriptParser = C.between(
+        C.literal("["),
+        C.alt(&.{ wildParser, stringParser, intParser }),
+        C.literal("]"),
     );
 
-    const identFirstPred = P.or_(std.ascii.isAlphabetic, P.set_("$_"));
-    const identRestPred = P.or_(identFirstPred, std.ascii.isDigit);
+    const identFirstPred = C.or_(std.ascii.isAlphabetic, C.set_("$_"));
+    const identRestPred = C.or_(identFirstPred, std.ascii.isDigit);
 
-    const identParser = P.span(.IDENT, P.left(
-        P.takeWhile(.NONE, .one, identFirstPred),
-        P.takeWhile(.NONE, .zeroOrMore, identRestPred),
+    const identParser = C.span(.IDENT, C.left(
+        C.takeWhile(.NONE, .one, identFirstPred),
+        C.takeWhile(.NONE, .zeroOrMore, identRestPred),
     ));
 
-    const refParser = P.alt(&.{
+    const refParser = C.alt(&.{
         subscriptParser,
         identParser,
         wildParser,
     });
 
-    const segmentParser = P.alt(&.{
+    const segmentParser = C.alt(&.{
         // ..foo    SEGMENT(SEARCH, IDENT | WILD)
         // ..[sub]  SEGMENT(SEARCH, NUMBER | STRING | WILD)
-        P.seq(.SEGMENT, &.{ P.keyword(.SEARCH, ".."), refParser }),
+        C.seq(.SEGMENT, &.{ C.keyword(.SEARCH, ".."), refParser }),
         // .foo     SEGMENT(SUBSCRIPT, IDENT | WILD)
         // .[sub]   SEGMENT(SUBSCRIPT, NUMBER | STRING | WILD)
-        P.seq(.SEGMENT, &.{ P.keyword(.SUBSCRIPT, "."), refParser }),
+        C.seq(.SEGMENT, &.{ C.keyword(.SUBSCRIPT, "."), refParser }),
         // [sub]    SEGMENT(SUBSCRIPT, NUMBER | STRING | WILD)
-        P.seq(.SEGMENT, &.{ P.always(.SUBSCRIPT, "."), subscriptParser }),
+        C.seq(.SEGMENT, &.{ C.always(.SUBSCRIPT, "."), subscriptParser }),
     });
 
-    return P.between(
-        P.literal("$"),
-        P.many(.PATH, .zeroOrMore, segmentParser),
-        P.eof(),
+    return C.between(
+        C.literal("$"),
+        C.many(.PATH, .zeroOrMore, segmentParser),
+        C.eof(),
     );
 }
 
