@@ -427,7 +427,7 @@ pub fn Compiler(config: Config) type {
         }
 
         /// Succeed with a token tagged with `tag` if the next input is the
-        /// tag name of the tag. Useful with tags like e.g. @"<=".
+        /// tag name of the tag. Useful with tags like e.g. `@"<="`.
         pub fn tagName(tag: Tag) Parser {
             // Only works with []u8
             assert(Char == u8);
