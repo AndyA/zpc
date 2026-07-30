@@ -1,7 +1,5 @@
 //! A construction kit for parsers that are constructed at comptime and may be
 //! called at runtime or comptime.
-//!
-//! [More](#zpc.Space.makeParsers)
 
 const std = @import("std");
 const print = std.debug.print;
