@@ -38,7 +38,7 @@ pub fn TokenType(config: Config) type {
         };
 
         /// The zeroeth tag in `Tag` is reserved for use when we don't
-        /// cat how a token is tagged.
+        /// care how a token is tagged.
         pub const NOP: config.Tag = @fromBackingInt(0);
 
         const Formatter = struct {
