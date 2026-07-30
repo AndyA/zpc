@@ -298,7 +298,7 @@ pub fn Zpc(config: Config) type {
         pub const Mapper = MapperType(config);
         pub const Predicate = PredicateType(config);
 
-        /// A icate_ that matches any char
+        /// A predicate that matches any char
         pub fn any_() Predicate {
             const shim = struct {
                 fn pred(_: Char) bool {
@@ -308,8 +308,8 @@ pub fn Zpc(config: Config) type {
             return shim.pred;
         }
 
-        /// A icate_ that is the (short circuited) AND of two other
-        /// icates_
+        /// A predicate that is the (short circuited) AND of two other
+        /// predicates
         pub fn and_(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
                 fn pred(char: Char) bool {
@@ -319,8 +319,8 @@ pub fn Zpc(config: Config) type {
             return shim.pred;
         }
 
-        /// A icate_ that is the (short circuited) OR of two other
-        /// icates_
+        /// A predicate that is the (short circuited) OR of two other
+        /// predicates
         pub fn or_(a: Predicate, b: Predicate) Predicate {
             const shim = struct {
                 fn pred(char: Char) bool {
@@ -330,7 +330,7 @@ pub fn Zpc(config: Config) type {
             return shim.pred;
         }
 
-        /// A icate_ that negates the supplied icate_
+        /// A predicate that negates the supplied predicate
         pub fn not_(p: Predicate) Predicate {
             const shim = struct {
                 fn pred(char: Char) bool {
@@ -340,7 +340,7 @@ pub fn Zpc(config: Config) type {
             return shim.pred;
         }
 
-        /// A icate_ that is true if the item equals `want`
+        /// A predicate that is true if the item equals `want`
         pub fn equal_(want: Char) Predicate {
             const shim = struct {
                 fn pred(char: Char) bool {
@@ -350,7 +350,7 @@ pub fn Zpc(config: Config) type {
             return shim.pred;
         }
 
-        /// A icate_ that tests whether the item is in `charset`
+        /// A predicate that tests whether the item is in `charset`
         pub fn set_(charset: []const Char) Predicate {
             const shim = struct {
                 fn pred(char: Char) bool {
