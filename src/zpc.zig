@@ -777,11 +777,7 @@ pub fn Compiler(config: Config) type {
 
         /// If `left_parser`, `parser` and `right_parser` succeed in sequence return
         /// the result of `parser` and discard the left and right results.
-        pub fn between(
-            left_parser: Parser,
-            parser: Parser,
-            right_parser: Parser,
-        ) Parser {
+        pub fn between(left_parser: Parser, parser: Parser, right_parser: Parser) Parser {
             return left(right(left_parser, parser), right_parser);
         }
 
