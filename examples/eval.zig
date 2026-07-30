@@ -33,7 +33,7 @@ const Tag = enum(u8) {
 };
 
 const Context = struct {
-    pub const config: zpc.ZpcConfig = .{ .Tag = Tag, .Context = @This() };
+    pub const config: zpc.Config = .{ .Tag = Tag, .Context = @This() };
     allocator: Allocator,
     expr: *const zpc.ParserType(config),
 };

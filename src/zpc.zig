@@ -15,16 +15,16 @@ const ct = @import("zpc/comptime.zig");
 
 pub const Quantifier = @import("zpc/Quantifier.zig");
 pub const Phase = enum { comp, run };
-const Error = error{OutOfMemory};
+pub const Error = error{OutOfMemory};
 
-pub const ZpcConfig = struct {
+pub const Config = struct {
     Tag: type, // enum
     Context: type = undefined,
     phase: Phase = .run,
     Char: type = u8,
 };
 
-pub fn TokenType(config: ZpcConfig) type {
+pub fn TokenType(config: Config) type {
     return struct {
         const Self = @This();
         pub const ArrayList = switch (config.phase) {
@@ -190,7 +190,7 @@ pub fn TokenType(config: ZpcConfig) type {
     };
 }
 
-pub fn ResultType(config: ZpcConfig) type {
+pub fn ResultType(config: Config) type {
     const Token = TokenType(config);
     return struct {
         const Self = @This();
@@ -272,21 +272,21 @@ pub fn ResultType(config: ZpcConfig) type {
     };
 }
 
-pub fn ParserType(config: ZpcConfig) type {
+pub fn ParserType(config: Config) type {
     const Result = ResultType(config);
     return fn (ctx: config.Context, input: []const config.Char) Error!Result;
 }
 
-pub fn MapperType(config: ZpcConfig) type {
+pub fn MapperType(config: Config) type {
     const Result = ResultType(config);
     return fn (ctx: config.Context, input: []const config.Char, result: Result) Error!Result;
 }
 
-pub fn PredicateType(config: ZpcConfig) type {
+pub fn PredicateType(config: Config) type {
     return fn (char: config.Char) bool;
 }
 
-pub fn Zpc(config: ZpcConfig) type {
+pub fn Zpc(config: Config) type {
     const Char = config.Char;
     const Tag = config.Tag;
     const Context = config.Context;
@@ -762,7 +762,7 @@ const TestTag = enum(u8) {
 };
 
 const TestContext = struct {
-    pub const config: ZpcConfig = .{
+    pub const config: Config = .{
         .Tag = TestTag,
         .Context = @This(),
     };
@@ -1293,7 +1293,7 @@ test "recurse" {
 test "ComptimeParsers" {
     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
     const Context = struct {
-        pub const config: ZpcConfig = .{
+        pub const config: Config = .{
             .Tag = Tag,
             .Context = @This(),
             .phase = .comp,
