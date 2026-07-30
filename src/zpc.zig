@@ -1252,6 +1252,33 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(ctx, want, try parseExpr(ctx, expr));
         }
+
+        test "ComptimeParsers" {
+            const ComptimeTag = enum { NONE, DIGIT, ALPHA, MULTI };
+            const ComptimeContext = struct {
+                const cfg: Config = .{
+                    .Tag = ComptimeTag,
+                    .Context = @This(),
+                    .phase = .comp,
+                };
+            };
+
+            const CP = Compiler(ComptimeContext.cfg);
+            const parseAlphaNum = CP.seq(.MULTI, &.{
+                CP.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
+                CP.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
+            });
+
+            const res = comptime blk: {
+                const ctx: ComptimeContext = .{};
+                break :blk try parseAlphaNum(ctx, "123ABC.");
+            };
+
+            try expectEqualDeep(CP.Result.initOk(.initList(.MULTI, &.{
+                .initSlice(.DIGIT, "123"),
+                .initSlice(.ALPHA, "ABC"),
+            }), "."), res);
+        }
     };
 }
 
@@ -1298,31 +1325,4 @@ fn checkAndConsume(
 ) !void {
     defer actual.deinit(ctx);
     try expectEqualDeep(expected, actual);
-}
-
-test "ComptimeParsers" {
-    const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
-    const Context = struct {
-        const config: Config = .{
-            .Tag = Tag,
-            .Context = @This(),
-            .phase = .comp,
-        };
-    };
-
-    const CP = Compiler(Context.config);
-    const parseAlphaNum = CP.seq(.MULTI, &.{
-        CP.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
-        CP.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
-    });
-
-    const res = comptime blk: {
-        const ctx: Context = .{};
-        break :blk try parseAlphaNum(ctx, "123ABC.");
-    };
-
-    try expectEqualDeep(CP.Result.initOk(.initList(.MULTI, &.{
-        .initSlice(.DIGIT, "123"),
-        .initSlice(.ALPHA, "ABC"),
-    }), "."), res);
 }
