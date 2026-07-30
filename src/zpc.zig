@@ -41,7 +41,7 @@ pub fn TokenType(config: Config) type {
         /// cat how a token is tagged.
         pub const NOP: config.Tag = @fromBackingInt(0);
 
-        pub const Formatter = struct {
+        const Formatter = struct {
             token: *const Self,
             pretty: bool = false,
             depth: usize = 0,
@@ -101,6 +101,10 @@ pub fn TokenType(config: Config) type {
 
         pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
             try (Formatter{ .token = &self }).format(writer);
+        }
+
+        pub fn pretty(self: *const Self) Formatter {
+            return .{ .token = self, .pretty = true };
         }
 
         fn getAlloc(ctx: Context) Allocator {
@@ -223,7 +227,7 @@ pub fn ResultType(config: Config) type {
     return struct {
         const Self = @This();
 
-        pub const Formatter = struct {
+        const Formatter = struct {
             token: *const Self,
             pretty: bool = false,
 
@@ -265,7 +269,11 @@ pub fn ResultType(config: Config) type {
         rest: []const config.Char,
 
         pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
-            try (Formatter{ .token = &self, .pretty = true }).format(writer);
+            try (Formatter{ .token = &self, .pretty = false }).format(writer);
+        }
+
+        pub fn pretty(self: *const Self) Formatter {
+            return .{ .token = self, .pretty = true };
         }
 
         pub fn initFail(at: []const config.Char, rest: []const config.Char) Self {

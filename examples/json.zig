@@ -117,5 +117,5 @@ pub fn main(init: std.process.Init) !void {
         \\}
     );
     defer res.deinit(ctx);
-    print("{f}", .{res});
+    print("{f}", .{res.pretty()});
 }

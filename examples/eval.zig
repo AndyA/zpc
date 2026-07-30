@@ -176,7 +176,7 @@ pub fn main(init: std.process.Init) !void {
         print("expr: {s}\n\n", .{path});
         const res = try fullParser(ctx, path);
         defer res.deinit(ctx);
-        print("{f}\n", .{res});
+        print("{f}\n", .{res.pretty()});
         if (res.succeeded())
             print("result: {d}\n\n", .{try eval(res.tok.ok)});
     }

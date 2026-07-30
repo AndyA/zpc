@@ -77,5 +77,5 @@ pub fn main(init: std.process.Init) !void {
         \\1,2,3,4
     );
     defer res.deinit(ctx);
-    print("{f}", .{res});
+    print("{f}", .{res.pretty()});
 }

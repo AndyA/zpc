@@ -106,6 +106,6 @@ pub fn main(init: std.process.Init) !void {
         print("Path: {s}\n\n", .{path});
         const res = try jsonPathParser(ctx, path);
         defer res.deinit(ctx);
-        print("{f}\n", .{res});
+        print("{f}\n", .{res.pretty()});
     }
 }
