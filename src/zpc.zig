@@ -200,7 +200,6 @@ pub fn Space(Item: type) type {
                     list: []const Self,
                     flat: []const Self, // Like a list but flattens into its parent
                 },
-                notes: ?*anyopaque = null,
 
                 pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
                     try (Formatter{ .token = &self }).format(writer);
