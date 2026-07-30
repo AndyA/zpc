@@ -22,9 +22,9 @@ pub const Config = struct {
     Tag: type,
     /// The context that is passed to parsers
     Context: type,
-    /// Whether parsers will be called at runtime (`.run`) or comptime (`.comp`)
+    /// Whether generated parsers will be called at runtime (`.run`) or comptime (`.comp`)
     phase: Phase = .run,
-    /// The type of a character. May be any type that is supported by `std.mem.eql`
+    /// The type of a character; may be any type that is supported by `std.mem.eql`
     Char: type = u8,
 };
 
