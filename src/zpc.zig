@@ -18,9 +18,13 @@ pub const Phase = enum { comp, run };
 pub const Error = error{OutOfMemory};
 
 pub const Config = struct {
-    Tag: type, // enum
+    /// An enum that will be used to tag parsed tokens
+    Tag: type,
+    /// The context that is passed to parsers
     Context: type = undefined,
+    /// Whether parsers will be called at runtime (`.run`) or comptime (`.comp`)
     phase: Phase = .run,
+    /// The type of a character. May be any type that is supported by `std.mem.eql`
     Char: type = u8,
 };
 
