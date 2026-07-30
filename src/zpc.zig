@@ -16,7 +16,7 @@ pub const Error = error{OutOfMemory};
 pub const Config = struct {
     /// An enum that will be used to tag parsed tokens
     Tag: type,
-    /// The context that is passed to parsers
+    /// The type of the context that is passed to parsers
     Context: type,
     /// Whether generated parsers will be called at runtime (`.run`) or comptime (`.comp`)
     phase: Phase = .run,
