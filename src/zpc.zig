@@ -27,6 +27,9 @@ pub const Config = struct {
 };
 
 pub fn TokenType(config: Config) type {
+    const Char = config.Char;
+    const Context = config.Context;
+    const Tag = config.Tag;
     return struct {
         const Self = @This();
         pub const ArrayList = switch (config.phase) {
@@ -34,8 +37,6 @@ pub fn TokenType(config: Config) type {
             .run => std.ArrayList(Self),
         };
         pub const NOP: config.Tag = @fromBackingInt(0);
-
-        pub const nothing: Self = .{ .tag = NOP, .value = .{ .nothing = {} } };
 
         pub const Formatter = struct {
             token: *const Self,
@@ -86,10 +87,11 @@ pub fn TokenType(config: Config) type {
             }
         };
 
-        tag: config.Tag = NOP,
+        tag: Tag = NOP,
+        input: []const Char,
         value: union(enum(u8)) {
             nothing: void,
-            slice: []const config.Char,
+            slice: []const Char,
             list: []const Self,
             flat: []const Self, // Like a list but flattens into its parent
         },
@@ -98,34 +100,55 @@ pub fn TokenType(config: Config) type {
             try (Formatter{ .token = &self }).format(writer);
         }
 
-        fn getAlloc(ctx: config.Context) Allocator {
+        fn getAlloc(ctx: Context) Allocator {
             return switch (config.phase) {
                 .comp => ct.non_allocator,
                 .run => ctx.allocator,
             };
         }
 
-        fn freeList(ctx: config.Context, list: []const Self) void {
+        fn freeList(ctx: Context, list: []const Self) void {
             switch (config.phase) {
                 .comp => {},
                 .run => ctx.allocator.free(list),
             }
         }
 
-        pub fn initSlice(_: config.Context, tag: config.Tag, slice: []const config.Char) Self {
-            return .{ .tag = tag, .value = .{ .slice = slice } };
+        pub fn initNothing(input: []const Char) Self {
+            return .{
+                .tag = NOP,
+                .input = input,
+                .value = .nothing,
+            };
         }
 
-        pub fn initList(_: config.Context, tag: config.Tag, list: []const Self) Self {
-            return .{ .tag = tag, .value = .{ .list = list } };
+        pub fn initSlice(input: []const Char, tag: Tag, slice: []const Char) Self {
+            return .{
+                .tag = tag,
+                .input = input,
+                .value = .{ .slice = slice },
+            };
         }
 
-        pub fn initArrayList(ctx: config.Context, tag: config.Tag, array: *ArrayList) Error!Self {
+        pub fn initList(input: []const Char, tag: Tag, list: []const Self) Self {
+            return .{
+                .tag = tag,
+                .input = input,
+                .value = .{ .list = list },
+            };
+        }
+
+        pub fn initArrayList(
+            ctx: Context,
+            input: []const Char,
+            tag: Tag,
+            array: *ArrayList,
+        ) Error!Self {
             const list = try array.toOwnedSlice(getAlloc(ctx));
-            return initList(ctx, tag, list);
+            return initList(input, tag, list);
         }
 
-        pub fn appendToArrayList(self: Self, ctx: config.Context, array: *ArrayList) Error!void {
+        pub fn appendToArrayList(self: Self, ctx: Context, array: *ArrayList) Error!void {
             switch (self.value) {
                 .nothing => {},
                 .slice, .list => try array.append(getAlloc(ctx), self),
@@ -136,26 +159,26 @@ pub fn TokenType(config: Config) type {
             }
         }
 
-        pub fn deinit(self: Self, ctx: config.Context) void {
+        pub fn deinit(self: Self, ctx: Context) void {
             switch (self.value) {
                 .list, .flat => |list| deinitList(list, ctx),
                 .nothing, .slice => {},
             }
         }
 
-        pub fn deinitShallow(self: Self, ctx: config.Context) void {
+        pub fn deinitShallow(self: Self, ctx: Context) void {
             switch (self.value) {
                 .list, .flat => |list| freeList(ctx, list),
                 .nothing, .slice => {},
             }
         }
 
-        pub fn deinitList(list: []const Self, ctx: config.Context) void {
+        pub fn deinitList(list: []const Self, ctx: Context) void {
             for (list) |item| item.deinit(ctx);
             freeList(ctx, list);
         }
 
-        pub fn deinitArrayList(list: *ArrayList, ctx: config.Context) void {
+        pub fn deinitArrayList(list: *ArrayList, ctx: Context) void {
             for (list.items) |item| item.deinit(ctx);
             list.deinit(getAlloc(ctx));
         }
@@ -369,10 +392,10 @@ pub fn Compiler(config: Config) type {
         pub fn keyword(tag: Tag, str: []const Char) Parser {
             assert(str.len != 0);
             const shim = struct {
-                fn keywordParser(ctx: Context, input: []const Char) Error!Result {
+                fn keywordParser(_: Context, input: []const Char) Error!Result {
                     if (input.len >= str.len and
                         std.mem.eql(Char, input[0..str.len], str))
-                        return .initOk(.initSlice(ctx, tag, str), input[str.len..]);
+                        return .initOk(.initSlice(input, tag, str), input[str.len..]);
                     return .initFailHere(input);
                 }
             };
@@ -386,7 +409,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .HELLO, "Hello"), ", World"),
+                .initOk(.initSlice("Hello, World", .HELLO, "Hello"), ", World"),
                 try parseHello(ctx, "Hello, World"),
             );
 
@@ -418,7 +441,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .HELLO, "HELLO"), ", WORLD"),
+                .initOk(.initSlice("HELLO, WORLD", .HELLO, "HELLO"), ", WORLD"),
                 try parseHello(ctx, "HELLO, WORLD"),
             );
         }
@@ -432,8 +455,8 @@ pub fn Compiler(config: Config) type {
         /// Always succeed without consuming any input.
         pub fn always(tag: Tag, frag: []const Char) Parser {
             const shim = struct {
-                fn alwaysParser(ctx: Context, input: []const Char) Error!Result {
-                    return .initOk(.initSlice(ctx, tag, frag), input);
+                fn alwaysParser(_: Context, input: []const Char) Error!Result {
+                    return .initOk(.initSlice(input, tag, frag), input);
                 }
             };
             return shim.alwaysParser;
@@ -445,7 +468,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .FOO, "foo"), "Hello, World"),
+                .initOk(.initSlice("Hello, World", .FOO, "foo"), "Hello, World"),
                 try parseAlways(ctx, "Hello, World"),
             );
         }
@@ -456,7 +479,7 @@ pub fn Compiler(config: Config) type {
             const shim = struct {
                 fn eofParser(_: Context, input: []const Char) Error!Result {
                     if (input.len == 0)
-                        return .initOk(.nothing, input);
+                        return .initOk(.initNothing(input), input);
                     return .initFailHere(input);
                 }
             };
@@ -469,7 +492,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.nothing, ""),
+                .initOk(.initNothing(""), ""),
                 try parseEof(ctx, ""),
             );
 
@@ -483,8 +506,8 @@ pub fn Compiler(config: Config) type {
         /// Consume the remainder of the input and return it in a `.slice`.
         pub fn rest(tag: Tag) Parser {
             const shim = struct {
-                fn restParser(ctx: Context, input: []const Char) Error!Result {
-                    return .initOk(.initSlice(ctx, tag, input), "");
+                fn restParser(_: Context, input: []const Char) Error!Result {
+                    return .initOk(.initSlice(input, tag, input), "");
                 }
             };
             return shim.restParser;
@@ -498,9 +521,9 @@ pub fn Compiler(config: Config) type {
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(ctx, .MULTI, &.{
-                    .initSlice(ctx, .DIGIT, "123"),
-                    .initSlice(ctx, .REST, "ABC."),
+                .initOk(.initList("123ABC.", .MULTI, &.{
+                    .initSlice("123ABC.", .DIGIT, "123"),
+                    .initSlice("ABC.", .REST, "ABC."),
                 }), ""),
 
                 try parseAllDigits(ctx, "123ABC."),
@@ -513,7 +536,7 @@ pub fn Compiler(config: Config) type {
         pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
             assert(quantifier.min <= quantifier.max);
             const shim = struct {
-                fn takeWhileParser(ctx: Context, input: []const Char) Error!Result {
+                fn takeWhileParser(_: Context, input: []const Char) Error!Result {
                     const len = @min(input.len, quantifier.max);
                     if (len < quantifier.min)
                         return .initFail("", input);
@@ -522,7 +545,7 @@ pub fn Compiler(config: Config) type {
                         pos += 1;
                     if (pos < quantifier.min)
                         return .initFail(input[pos..], input);
-                    return .initOk(.initSlice(ctx, tag, input[0..pos]), input[pos..]);
+                    return .initOk(.initSlice(input, tag, input[0..pos]), input[pos..]);
                 }
             };
             return shim.takeWhileParser;
@@ -538,19 +561,19 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .DIGIT, "67"), "b"),
+                .initOk(.initSlice("67b", .DIGIT, "67"), "b"),
                 try parseDigits(ctx, "67b"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .DIGIT, "67"), ""),
+                .initOk(.initSlice("67", .DIGIT, "67"), ""),
                 try parseDigits(ctx, "67"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .DIGIT, "67"), "8"),
+                .initOk(.initSlice("678", .DIGIT, "67"), "8"),
                 try parseDigits(ctx, "678"),
             );
 
@@ -601,13 +624,13 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .HELLO, "Hello"), ", World"),
+                .initOk(.initSlice("Hello, World", .HELLO, "Hello"), ", World"),
                 try parseAlt(ctx, "Hello, World"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .FOO, "Foo"), "Bar"),
+                .initOk(.initSlice("FooBar", .FOO, "Foo"), "Bar"),
                 try parseAlt(ctx, "FooBar"),
             );
 
@@ -638,7 +661,7 @@ pub fn Compiler(config: Config) type {
                         try res.tok.ok.appendToArrayList(ctx, &list);
                     }
 
-                    return .initOk(try .initArrayList(ctx, tag, &list), tail);
+                    return .initOk(try .initArrayList(ctx, input, tag, &list), tail);
                 }
             };
             return shim.seqParser;
@@ -653,9 +676,9 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(ctx, .MULTI, &.{
-                    .initSlice(ctx, .DIGIT, "123"),
-                    .initSlice(ctx, .ALPHA, "ABC"),
+                .initOk(.initList("123ABC.", .MULTI, &.{
+                    .initSlice("123ABC.", .DIGIT, "123"),
+                    .initSlice("ABC.", .ALPHA, "ABC"),
                 }), "."),
 
                 try parseAlphaNum(ctx, "123ABC."),
@@ -693,7 +716,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .FOO, "Foo"), "Baz"),
+                .initOk(.initSlice("FooBarBaz", .FOO, "Foo"), "Baz"),
                 try parseLeft(ctx, "FooBarBaz"),
             );
 
@@ -735,7 +758,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .BAR, "Bar"), "Baz"),
+                .initOk(.initSlice("BarBaz", .BAR, "Bar"), "Baz"),
                 try parseRight(ctx, "FooBarBaz"),
             );
 
@@ -772,7 +795,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .DIGIT, "123"), "."),
+                .initOk(.initSlice("123).", .DIGIT, "123"), "."),
                 try parseBetween(ctx, "(123)."),
             );
 
@@ -809,7 +832,7 @@ pub fn Compiler(config: Config) type {
                         tail = res.rest;
                         try res.tok.ok.appendToArrayList(ctx, &list);
                     }
-                    return .initOk(try .initArrayList(ctx, tag, &list), tail);
+                    return .initOk(try .initArrayList(ctx, input, tag, &list), tail);
                 }
             };
             return shim.manyParser;
@@ -825,20 +848,20 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(ctx, .MULTI, &.{
-                    .initSlice(ctx, .FOO, "Foo"),
-                    .initSlice(ctx, .FOO, "Foo"),
-                    .initSlice(ctx, .BAR, "Bar"),
+                .initOk(.initList("FooFooBarBaz", .MULTI, &.{
+                    .initSlice("FooFooBarBaz", .FOO, "Foo"),
+                    .initSlice("FooBarBaz", .FOO, "Foo"),
+                    .initSlice("BarBaz", .BAR, "Bar"),
                 }), "Baz"),
                 try parseFooBar(ctx, "FooFooBarBaz"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(ctx, .MULTI, &.{
-                    .initSlice(ctx, .FOO, "Foo"),
-                    .initSlice(ctx, .FOO, "Foo"),
-                    .initSlice(ctx, .BAR, "Bar"),
+                .initOk(.initList("FooFooBarBarBaz", .MULTI, &.{
+                    .initSlice("FooFooBarBarBaz", .FOO, "Foo"),
+                    .initSlice("FooBarBarBaz", .FOO, "Foo"),
+                    .initSlice("BarBarBaz", .BAR, "Bar"),
                 }), "BarBaz"),
                 try parseFooBar(ctx, "FooFooBarBarBaz"),
             );
@@ -856,7 +879,7 @@ pub fn Compiler(config: Config) type {
                 fn optionalParser(ctx: Context, input: []const Char) Error!Result {
                     const res = try parser(ctx, input);
                     if (res.succeeded()) return res;
-                    return .initOk(.nothing, input);
+                    return .initOk(.initNothing(input), input);
                 }
             };
             return shim.optionalParser;
@@ -872,13 +895,13 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .DIGIT, "123"), "Foo"),
+                .initOk(.initSlice("123Foo", .DIGIT, "123"), "Foo"),
                 try parseMaybeNumber(ctx, "123Foo"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.nothing, "Foo"),
+                .initOk(.initNothing("Foo"), "Foo"),
                 try parseMaybeNumber(ctx, "Foo"),
             );
         }
@@ -923,7 +946,7 @@ pub fn Compiler(config: Config) type {
                     res: Result,
                 ) Error!Result {
                     if (!res.succeeded()) return .initFail(res.tok.fail, input);
-                    return .initOk(.nothing, res.rest);
+                    return .initOk(.initNothing(res.tok.ok.input), res.rest);
                 }
             };
 
@@ -937,7 +960,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.nothing, ", World"),
+                .initOk(.initNothing("Hello, World"), ", World"),
                 try parseHello(ctx, "Hello, World"),
             );
 
@@ -953,13 +976,13 @@ pub fn Compiler(config: Config) type {
         pub fn span(tag: Tag, parser: Parser) Parser {
             const shim = struct {
                 fn spanMapper(
-                    ctx: Context,
+                    _: Context,
                     input: []const Char,
                     res: Result,
                 ) Error!Result {
                     if (!res.succeeded()) return .initFail(res.tok.fail, input);
                     const consumed: usize = input.len - res.rest.len;
-                    return .initOk(.initSlice(ctx, tag, input[0..consumed]), res.rest);
+                    return .initOk(.initSlice(input, tag, input[0..consumed]), res.rest);
                 }
             };
 
@@ -974,7 +997,7 @@ pub fn Compiler(config: Config) type {
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .ALNUM, "100abc"), "."),
+                .initOk(.initSlice("100abc.", .ALNUM, "100abc"), "."),
                 try parseAlphaNum(ctx, "100abc."),
             );
         }
@@ -989,6 +1012,7 @@ pub fn Compiler(config: Config) type {
                     return switch (res.tok.ok.value) {
                         .list => |list| .initOk(.{
                             .tag = res.tok.ok.tag,
+                            .input = res.tok.ok.input,
                             .value = .{ .flat = list },
                         }, res.rest),
                         else => res,
@@ -1012,10 +1036,10 @@ pub fn Compiler(config: Config) type {
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
             const expr = "1,2,3;";
-            const want: C.Result = .initOk(.initList(ctx, .ARRAY, &.{
-                .initSlice(ctx, .DIGIT, "1"),
-                .initSlice(ctx, .DIGIT, "2"),
-                .initSlice(ctx, .DIGIT, "3"),
+            const want: C.Result = .initOk(.initList("1,2,3;", .ARRAY, &.{
+                .initSlice("1,2,3;", .DIGIT, "1"),
+                .initSlice("2,3;", .DIGIT, "2"),
+                .initSlice("3;", .DIGIT, "3"),
             }), ";");
 
             if (false) {
@@ -1056,7 +1080,7 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .DIGIT, ""), "."),
+                .initOk(.initSlice(".", .DIGIT, ""), "."),
                 try parseDigits(ctx, "."),
             );
 
@@ -1097,23 +1121,23 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(ctx, .MULTI, &.{
-                    .initSlice(ctx, .FOO, "Foo"),
-                    .initSlice(ctx, .FOO, "Foo"),
-                    .initSlice(ctx, .FOO, "Foo"),
+                .initOk(.initList("FooFooFoo.", .MULTI, &.{
+                    .initSlice("FooFooFoo.", .FOO, "Foo"),
+                    .initSlice("FooFoo.", .FOO, "Foo"),
+                    .initSlice("Foo.", .FOO, "Foo"),
                 }), "."),
                 try parseLower(ctx, "FooFooFoo."),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .FOO, "Foo"), "."),
+                .initOk(.initSlice("Foo.", .FOO, "Foo"), "."),
                 try parseLower(ctx, "Foo."),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .FOO, "Foo"), "."),
+                .initOk(.initSlice("Foo.", .FOO, "Foo"), "."),
                 try parseFlatLower(ctx, "Foo."),
             );
         }
@@ -1157,19 +1181,19 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .FOO, "Foo"), " Hello"),
+                .initOk(.initSlice("Foo", .FOO, "Foo"), " Hello"),
                 try parseKeyword(ctx, "Foo Hello"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .BAR, "Bar"), " Hello"),
+                .initOk(.initSlice("Bar", .BAR, "Bar"), " Hello"),
                 try parseKeyword(ctx, "Bar Hello"),
             );
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initSlice(ctx, .IDENT, "FooBar"), " Hello"),
+                .initOk(.initSlice("FooBar Hello", .IDENT, "FooBar"), " Hello"),
                 try parseKeyword(ctx, "FooBar Hello"),
             );
         }
@@ -1213,32 +1237,32 @@ pub fn Compiler(config: Config) type {
 
             try checkAndConsume(
                 ctx,
-                .initOk(.initList(ctx, .TERM, &.{
-                    .initSlice(ctx, .DIGIT, "123"),
-                    .initList(ctx, .MANY, &.{}),
+                .initOk(.initList("123;", .TERM, &.{
+                    .initSlice("123;", .DIGIT, "123"),
+                    .initList(";", .MANY, &.{}),
                 }), ";"),
                 try parseExpr(ctx, "123;"),
             );
 
             const expr = "(123 + 7) - 2 + 700;";
-            const want: C.Result = .initOk(.initList(ctx, .TERM, &.{
-                .initList(ctx, .TERM, &.{
-                    .initSlice(ctx, .DIGIT, "123"),
-                    .initList(ctx, .MANY, &.{
-                        .initList(ctx, .SEQ, &.{
-                            .initSlice(ctx, .PLUS, "+"),
-                            .initSlice(ctx, .DIGIT, "7"),
+            const want: C.Result = .initOk(.initList("(123 + 7) - 2 + 700;", .TERM, &.{
+                .initList("123 + 7) - 2 + 700;", .TERM, &.{
+                    .initSlice("123 + 7) - 2 + 700;", .DIGIT, "123"),
+                    .initList(" + 7) - 2 + 700;", .MANY, &.{
+                        .initList(" + 7) - 2 + 700;", .SEQ, &.{
+                            .initSlice("+ 7) - 2 + 700;", .PLUS, "+"),
+                            .initSlice("7) - 2 + 700;", .DIGIT, "7"),
                         }),
                     }),
                 }),
-                .initList(ctx, .MANY, &.{
-                    .initList(ctx, .SEQ, &.{
-                        .initSlice(ctx, .MINUS, "-"),
-                        .initSlice(ctx, .DIGIT, "2"),
+                .initList(" - 2 + 700;", .MANY, &.{
+                    .initList(" - 2 + 700;", .SEQ, &.{
+                        .initSlice("- 2 + 700;", .MINUS, "-"),
+                        .initSlice("2 + 700;", .DIGIT, "2"),
                     }),
-                    .initList(ctx, .SEQ, &.{
-                        .initSlice(ctx, .PLUS, "+"),
-                        .initSlice(ctx, .DIGIT, "700"),
+                    .initList(" + 700;", .SEQ, &.{
+                        .initSlice("+ 700;", .PLUS, "+"),
+                        .initSlice("700;", .DIGIT, "700"),
                     }),
                 }),
             }), ";");
@@ -1274,9 +1298,9 @@ pub fn Compiler(config: Config) type {
                 break :blk try parseAlphaNum(ctx, "123ABC.");
             };
 
-            try expectEqualDeep(CP.Result.initOk(.initList(ctx, .MULTI, &.{
-                .initSlice(ctx, .DIGIT, "123"),
-                .initSlice(ctx, .ALPHA, "ABC"),
+            try expectEqualDeep(CP.Result.initOk(.initList("123ABC.", .MULTI, &.{
+                .initSlice("123ABC.", .DIGIT, "123"),
+                .initSlice("ABC.", .ALPHA, "ABC"),
             }), "."), res);
         }
     };
