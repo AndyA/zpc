@@ -1,4 +1,4 @@
-# Parser Builder
+# Zig Parser Compiler
 
 ## TODO
 

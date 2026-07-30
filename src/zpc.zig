@@ -594,6 +594,8 @@ pub fn Space(Item: type) type {
                     return left(right(left_parser, parser), right_parser);
                 }
 
+                /// Apply a parser until it fails or reaches `quantifier.max` matches and return
+                /// the result as a `.list` token.
                 pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
                     assert(quantifier.min <= quantifier.max);
                     const shim = struct {
