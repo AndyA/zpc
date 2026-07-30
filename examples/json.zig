@@ -20,14 +20,14 @@ const JsonTag = enum(u8) {
     KEYVALUE,
 };
 
-const config: zpc.ZpcConfig = .{ .Tag = JsonTag };
-
 const JsonContext = struct {
+    pub const config: zpc.ZpcConfig = .{ .Tag = JsonTag, .Context = @This() };
+
     allocator: Allocator,
-    jsonParser: *const zpc.ParserType(config, @This()),
+    jsonParser: *const zpc.ParserType(config),
 };
 
-const P = zpc.Zpc(config, JsonContext);
+const P = zpc.Zpc(JsonContext.config);
 
 const skipSpace = P.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
 

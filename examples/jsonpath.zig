@@ -20,13 +20,12 @@ const JsonPathTag = enum(u8) {
     WILD,
 };
 
-const config: zpc.ZpcConfig = .{ .Tag = JsonPathTag };
-
 const JsonPathContext = struct {
+    pub const config: zpc.ZpcConfig = .{ .Tag = JsonPathTag, .Context = @This() };
     allocator: Allocator,
 };
 
-const P = zpc.Zpc(config, JsonPathContext);
+const P = zpc.Zpc(JsonPathContext.config);
 
 fn makeJsonPathParser() P.Parser {
     const intParser = P.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);

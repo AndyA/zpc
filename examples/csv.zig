@@ -7,9 +7,12 @@ const Allocator = std.mem.Allocator;
 const zpc = @import("zpc");
 
 const CsvTag = enum(u8) { NONE, QUOTED, BARE, ROW, CSV };
-const CsvContext = struct { allocator: Allocator };
+const CsvContext = struct {
+    pub const config: zpc.ZpcConfig = .{ .Tag = CsvTag, .Context = @This() };
+    allocator: Allocator,
+};
 
-const P = zpc.Zpc(.{ .Tag = CsvTag }, CsvContext);
+const P = zpc.Zpc(CsvContext.config);
 
 fn makeCsvParser() P.Parser {
     // Skip horizontal whitespace

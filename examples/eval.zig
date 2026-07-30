@@ -33,11 +33,12 @@ const Tag = enum(u8) {
 };
 
 const Context = struct {
+    pub const config: zpc.ZpcConfig = .{ .Tag = Tag, .Context = @This() };
     allocator: Allocator,
-    expr: *const zpc.ParserType(.{ .Tag = Tag }, @This()),
+    expr: *const zpc.ParserType(config),
 };
 
-const P = zpc.Zpc(.{ .Tag = Tag }, Context);
+const P = zpc.Zpc(Context.config);
 
 const skipSpace = P.takeWhile(.N, .zeroOrMore, std.ascii.isWhitespace);
 

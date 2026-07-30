@@ -19,6 +19,7 @@ const Error = error{OutOfMemory};
 
 pub const ZpcConfig = struct {
     Tag: type, // enum
+    Context: type = undefined,
     phase: Phase = .run,
     Char: type = u8,
 };
@@ -95,14 +96,14 @@ pub fn TokenType(config: ZpcConfig) type {
             try (Formatter{ .token = &self }).format(writer);
         }
 
-        fn getAlloc(ctx: anytype) Allocator {
+        fn getAlloc(ctx: config.Context) Allocator {
             return switch (config.phase) {
                 .comp => ct.non_allocator,
                 .run => ctx.allocator,
             };
         }
 
-        fn freeList(ctx: anytype, list: []const Self) void {
+        fn freeList(ctx: config.Context, list: []const Self) void {
             switch (config.phase) {
                 .comp => {},
                 .run => ctx.allocator.free(list),
@@ -117,12 +118,12 @@ pub fn TokenType(config: ZpcConfig) type {
             return .{ .tag = tag, .value = .{ .list = list } };
         }
 
-        pub fn initArrayList(ctx: anytype, tag: config.Tag, array: *ArrayList) Error!Self {
+        pub fn initArrayList(ctx: config.Context, tag: config.Tag, array: *ArrayList) Error!Self {
             const list = try array.toOwnedSlice(getAlloc(ctx));
             return initList(tag, list);
         }
 
-        pub fn appendToArrayList(self: Self, ctx: anytype, array: *ArrayList) Error!void {
+        pub fn appendToArrayList(self: Self, ctx: config.Context, array: *ArrayList) Error!void {
             switch (self.value) {
                 .nothing => {},
                 .slice, .list => try array.append(getAlloc(ctx), self),
@@ -133,26 +134,26 @@ pub fn TokenType(config: ZpcConfig) type {
             }
         }
 
-        pub fn deinit(self: Self, ctx: anytype) void {
+        pub fn deinit(self: Self, ctx: config.Context) void {
             switch (self.value) {
                 .list, .flat => |list| deinitList(list, ctx),
                 .nothing, .slice => {},
             }
         }
 
-        pub fn deinitShallow(self: Self, ctx: anytype) void {
+        pub fn deinitShallow(self: Self, ctx: config.Context) void {
             switch (self.value) {
                 .list, .flat => |list| freeList(ctx, list),
                 .nothing, .slice => {},
             }
         }
 
-        pub fn deinitList(list: []const Self, ctx: anytype) void {
+        pub fn deinitList(list: []const Self, ctx: config.Context) void {
             for (list) |item| item.deinit(ctx);
             freeList(ctx, list);
         }
 
-        pub fn deinitArrayList(list: *ArrayList, ctx: anytype) void {
+        pub fn deinitArrayList(list: *ArrayList, ctx: config.Context) void {
             for (list.items) |item| item.deinit(ctx);
             list.deinit(getAlloc(ctx));
         }
@@ -251,14 +252,14 @@ pub fn ResultType(config: ZpcConfig) type {
             return .{ .tok = .{ .ok = value }, .rest = rest };
         }
 
-        pub fn deinit(self: Self, ctx: anytype) void {
+        pub fn deinit(self: Self, ctx: config.Context) void {
             switch (self.tok) {
                 .ok => |ok| ok.deinit(ctx),
                 .fail => {},
             }
         }
 
-        pub fn deinitShallow(self: Self, ctx: anytype) void {
+        pub fn deinitShallow(self: Self, ctx: config.Context) void {
             switch (self.tok) {
                 .ok => |ok| ok.deinitShallow(ctx),
                 .fail => {},
@@ -271,29 +272,30 @@ pub fn ResultType(config: ZpcConfig) type {
     };
 }
 
-pub fn ParserType(config: ZpcConfig, Context: type) type {
+pub fn ParserType(config: ZpcConfig) type {
     const Result = ResultType(config);
-    return fn (ctx: Context, input: []const config.Char) Error!Result;
+    return fn (ctx: config.Context, input: []const config.Char) Error!Result;
 }
 
-pub fn MapperType(config: ZpcConfig, Context: type) type {
+pub fn MapperType(config: ZpcConfig) type {
     const Result = ResultType(config);
-    return fn (ctx: Context, input: []const config.Char, result: Result) Error!Result;
+    return fn (ctx: config.Context, input: []const config.Char, result: Result) Error!Result;
 }
 
 pub fn PredicateType(config: ZpcConfig) type {
     return fn (char: config.Char) bool;
 }
 
-pub fn Zpc(config: ZpcConfig, Context: type) type {
+pub fn Zpc(config: ZpcConfig) type {
     const Char = config.Char;
     const Tag = config.Tag;
+    const Context = config.Context;
 
     return struct {
         pub const Token = TokenType(config);
         pub const Result = ResultType(config);
-        pub const Parser = ParserType(config, Context);
-        pub const Mapper = MapperType(config, Context);
+        pub const Parser = ParserType(config);
+        pub const Mapper = MapperType(config);
         pub const Predicate = PredicateType(config);
 
         /// A predicate that matches any char
@@ -759,16 +761,17 @@ const TestTag = enum(u8) {
     REST,
 };
 
-const test_config: ZpcConfig = .{
-    .Tag = TestTag,
+const TestContext = struct {
+    pub const config: ZpcConfig = .{
+        .Tag = TestTag,
+        .Context = @This(),
+    };
+    allocator: Allocator,
+    expr: *const ParserType(config) = undefined,
 };
 
-const TestResult = ResultType(test_config);
-const TestContext = struct {
-    allocator: Allocator,
-    expr: *const ParserType(test_config, @This()) = undefined,
-};
-const P = Zpc(test_config, TestContext);
+const TestResult = ResultType(TestContext.config);
+const P = Zpc(TestContext.config);
 
 fn checkAndConsume(
     ctx: TestContext,
@@ -1288,12 +1291,16 @@ test "recurse" {
 }
 
 test "ComptimeParsers" {
-    const Context = struct {};
-
     const Tag = enum { NONE, DIGIT, ALPHA, MULTI };
-    const config: ZpcConfig = .{ .Tag = Tag, .phase = .comp };
+    const Context = struct {
+        pub const config: ZpcConfig = .{
+            .Tag = Tag,
+            .Context = @This(),
+            .phase = .comp,
+        };
+    };
 
-    const CP = Zpc(config, Context);
+    const CP = Zpc(Context.config);
     const parseAlphaNum = CP.seq(.MULTI, &.{
         CP.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         CP.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
