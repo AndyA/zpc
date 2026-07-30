@@ -21,7 +21,7 @@ pub const Config = struct {
     /// An enum that will be used to tag parsed tokens
     Tag: type,
     /// The context that is passed to parsers
-    Context: type = undefined,
+    Context: type,
     /// Whether parsers will be called at runtime (`.run`) or comptime (`.comp`)
     phase: Phase = .run,
     /// The type of a character. May be any type that is supported by `std.mem.eql`
