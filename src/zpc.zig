@@ -11,42 +11,9 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
-const ct = @import("comptime.zig");
+const ct = @import("zpc/comptime.zig");
 
-/// Quantify the number of times a match may repeat. Useful constants:
-///
-/// * .zeroOrMore
-/// * .zeroOrOne
-/// * .oneOrMore
-/// * .one
-///
-pub const Quantifier = struct {
-    const Self = @This();
-    /// Match zero or more times (*)
-    pub const zeroOrMore: Self = .{};
-    /// Match zero or one times (?)
-    pub const zeroOrOne: Self = .{ .max = 1 };
-    /// Match one or more times (+)
-    pub const oneOrMore: Self = .{ .min = 1 };
-    /// Match exactly once
-    pub const one: Self = exactly(1);
-
-    /// Match between `min` and `max` times (inclusive)
-    pub fn range(min: usize, max: usize) Self {
-        assert(min <= max);
-        return .{ .min = min, .max = max };
-    }
-
-    /// Match exactly `n` times
-    pub fn exactly(n: usize) Self {
-        return range(n, n);
-    }
-
-    /// The minimum number of times to match
-    min: usize = 0,
-    /// The maximum number of times to match
-    max: usize = std.math.maxInt(usize),
-};
+pub const Quantifier = @import("zpc/Quantifier.zig");
 
 /// Although it's common to parse slices of `u8`, parsers can be constructed for any
 /// suitable scalar type. Common examples include `u21` for Unicode code points, `u16`
