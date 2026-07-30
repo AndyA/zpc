@@ -268,7 +268,7 @@ pub fn ResultType(config: Config) type {
             }
         }
 
-        pub fn matched(self: Self) bool {
+        pub fn succeeded(self: Self) bool {
             return self.tok == .ok;
         }
     };
@@ -580,7 +580,7 @@ pub fn Compiler(config: Config) type {
                     var hwm = input;
                     inline for (parsers) |parser| {
                         const res = try parser(ctx, input);
-                        if (res.matched())
+                        if (res.succeeded())
                             return res;
                         hwm = furthest(hwm, res.tok.fail);
                     }
@@ -630,7 +630,7 @@ pub fn Compiler(config: Config) type {
                     var tail = input;
                     inline for (parsers) |parser| {
                         const res = try parser(ctx, tail);
-                        if (!res.matched()) {
+                        if (!res.succeeded()) {
                             Token.deinitArrayList(&list, ctx);
                             return .initFail(res.tok.fail, input);
                         }
@@ -671,9 +671,9 @@ pub fn Compiler(config: Config) type {
                 fn leftParser(ctx: Context, input: []const Char) Error!Result {
                     const lres = try left_parser(ctx, input);
                     errdefer lres.deinit(ctx);
-                    if (!lres.matched()) return lres;
+                    if (!lres.succeeded()) return lres;
                     const rres = try discard(right_parser)(ctx, lres.rest);
-                    if (!rres.matched()) {
+                    if (!rres.succeeded()) {
                         lres.deinit(ctx);
                         return .initFail(rres.tok.fail, input);
                     }
@@ -716,9 +716,9 @@ pub fn Compiler(config: Config) type {
             const shim = struct {
                 fn rightParser(ctx: Context, input: []const Char) Error!Result {
                     const lres = try discard(left_parser)(ctx, input);
-                    if (!lres.matched()) return lres;
+                    if (!lres.succeeded()) return lres;
                     const rres = try right_parser(ctx, lres.rest);
-                    if (!rres.matched()) return .initFail(rres.tok.fail, input);
+                    if (!rres.succeeded()) return .initFail(rres.tok.fail, input);
                     return rres;
                 }
             };
@@ -800,7 +800,7 @@ pub fn Compiler(config: Config) type {
                     var tail = input;
                     while (list.items.len < quantifier.max) {
                         const res = try advances(parser)(ctx, tail);
-                        if (!res.matched()) {
+                        if (!res.succeeded()) {
                             if (list.items.len >= quantifier.min)
                                 break;
                             Token.deinitArrayList(&list, ctx);
@@ -855,7 +855,7 @@ pub fn Compiler(config: Config) type {
             const shim = struct {
                 fn optionalParser(ctx: Context, input: []const Char) Error!Result {
                     const res = try parser(ctx, input);
-                    if (res.matched()) return res;
+                    if (res.succeeded()) return res;
                     return .initOk(.nothing, input);
                 }
             };
@@ -922,7 +922,7 @@ pub fn Compiler(config: Config) type {
                     input: []const Char,
                     res: Result,
                 ) Error!Result {
-                    if (!res.matched()) return .initFail(res.tok.fail, input);
+                    if (!res.succeeded()) return .initFail(res.tok.fail, input);
                     return .initOk(.nothing, res.rest);
                 }
             };
@@ -957,7 +957,7 @@ pub fn Compiler(config: Config) type {
                     input: []const Char,
                     res: Result,
                 ) Error!Result {
-                    if (!res.matched()) return .initFail(res.tok.fail, input);
+                    if (!res.succeeded()) return .initFail(res.tok.fail, input);
                     const consumed: usize = input.len - res.rest.len;
                     return .initOk(.initSlice(tag, input[0..consumed]), res.rest);
                 }
@@ -985,7 +985,7 @@ pub fn Compiler(config: Config) type {
             const shim = struct {
                 fn flatParser(ctx: Context, input: []const Char) Error!Result {
                     const res = try parser(ctx, input);
-                    if (!res.matched()) return res;
+                    if (!res.succeeded()) return res;
                     return switch (res.tok.ok.value) {
                         .list => |list| .initOk(.{
                             .tag = res.tok.ok.tag,
@@ -1039,7 +1039,7 @@ pub fn Compiler(config: Config) type {
             const shim = struct {
                 fn advancesParser(ctx: Context, input: []const Char) Error!Result {
                     const res = try parser(ctx, input);
-                    if (res.matched() and input.len == res.rest.len) {
+                    if (res.succeeded() and input.len == res.rest.len) {
                         res.deinit(ctx);
                         return .initFailHere(input);
                     }
@@ -1073,7 +1073,7 @@ pub fn Compiler(config: Config) type {
             const shim = struct {
                 fn lowerParser(ctx: Context, input: []const Char) Error!Result {
                     const res = try parser(ctx, input);
-                    if (res.matched()) {
+                    if (res.succeeded()) {
                         switch (res.tok.ok.value) {
                             .nothing, .slice => {},
                             .flat, .list => |list| {
@@ -1128,13 +1128,13 @@ pub fn Compiler(config: Config) type {
                     const lres = try lower_parser(ctx, input);
                     errdefer lres.deinit(ctx);
 
-                    if (!lres.matched())
+                    if (!lres.succeeded())
                         return lres;
 
                     const consumed: usize = input.len - lres.rest.len;
                     var ures = try left(upper_parser, eof())(ctx, input[0..consumed]);
 
-                    if (!ures.matched())
+                    if (!ures.succeeded())
                         return lres;
 
                     defer lres.deinit(ctx);
