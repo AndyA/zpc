@@ -20,7 +20,7 @@ fn makeCsvParser() P.Parser {
 
     const charParser = P.alt(&.{
         P.literal("\"\""),
-        P.takeWhile(.NONE, .oneOrMore, zpc.predNot(zpc.predEqual('\"'))),
+        P.takeUntil(.NONE, .oneOrMore, zpc.predEqual('\"')),
     });
 
     const stringParser = P.between(
