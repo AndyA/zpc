@@ -362,68 +362,6 @@ pub fn Zpc(config: Config) type {
             }
         };
 
-        /// A predicate that matches any char
-        pub fn any_() Predicate {
-            const shim = struct {
-                fn pred(_: Char) bool {
-                    return true;
-                }
-            };
-            return shim.pred;
-        }
-
-        /// A predicate that is the (short circuited) AND of two other
-        /// predicates
-        pub fn and_(a: Predicate, b: Predicate) Predicate {
-            const shim = struct {
-                fn pred(char: Char) bool {
-                    return a(char) and b(char);
-                }
-            };
-            return shim.pred;
-        }
-
-        /// A predicate that is the (short circuited) OR of two other
-        /// predicates
-        pub fn or_(a: Predicate, b: Predicate) Predicate {
-            const shim = struct {
-                fn pred(char: Char) bool {
-                    return a(char) or b(char);
-                }
-            };
-            return shim.pred;
-        }
-
-        /// A predicate that negates the supplied predicate
-        pub fn not_(p: Predicate) Predicate {
-            const shim = struct {
-                fn pred(char: Char) bool {
-                    return !p(char);
-                }
-            };
-            return shim.pred;
-        }
-
-        /// A predicate that is true if the item equals `want`
-        pub fn equal_(want: Char) Predicate {
-            const shim = struct {
-                fn pred(char: Char) bool {
-                    return char == want;
-                }
-            };
-            return shim.pred;
-        }
-
-        /// A predicate that tests whether the item is in `charset`
-        pub fn set_(charset: []const Char) Predicate {
-            const shim = struct {
-                fn pred(char: Char) bool {
-                    return std.mem.containsAtLeastScalar(config.Char, charset, char, 1);
-                }
-            };
-            return shim.pred;
-        }
-
         pub fn keyword(tag: Tag, str: []const Char) Parser {
             assert(str.len != 0);
             const shim = struct {
@@ -505,7 +443,7 @@ pub fn Zpc(config: Config) type {
         /// of matched chars falls outside the bounds of `quantifier`. The matched
         /// chars are returned as a `.slice` token.
         pub fn takeUntil(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
-            return takeWhile(tag, quantifier, not_(pred));
+            return takeWhile(tag, quantifier, P.not_(pred));
         }
 
         /// Try each of `parsers` in turn returning the result of the first

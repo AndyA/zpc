@@ -32,9 +32,9 @@ fn makeJsonPathParser() C.Parser {
 
     const charParser = C.alt(&.{
         C.left(C.literal("\\"), C.takeUntil(.NONE, .one, std.ascii.isControl)),
-        C.takeUntil(.NONE, .oneOrMore, C.or_(
+        C.takeUntil(.NONE, .oneOrMore, C.P.or_(
             std.ascii.isControl,
-            C.set_("\"\\"),
+            C.P.set_("\"\\"),
         )),
     });
 
@@ -52,8 +52,8 @@ fn makeJsonPathParser() C.Parser {
         C.literal("]"),
     );
 
-    const identFirstPred = C.or_(std.ascii.isAlphabetic, C.set_("$_"));
-    const identRestPred = C.or_(identFirstPred, std.ascii.isDigit);
+    const identFirstPred = C.P.or_(std.ascii.isAlphabetic, C.P.set_("$_"));
+    const identRestPred = C.P.or_(identFirstPred, std.ascii.isDigit);
 
     const identParser = C.span(.IDENT, C.left(
         C.takeWhile(.NONE, .one, identFirstPred),

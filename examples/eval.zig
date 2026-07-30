@@ -56,8 +56,8 @@ fn makeExpressionParser() C.Parser {
     const l = C.literal;
     const intParser = C.takeWhile(.INT, .oneOrMore, std.ascii.isDigit);
 
-    const identFirstPred = C.or_(std.ascii.isAlphabetic, C.equal_('_'));
-    const identRestPred = C.or_(identFirstPred, std.ascii.isDigit);
+    const identFirstPred = C.P.or_(std.ascii.isAlphabetic, C.P.equal_('_'));
+    const identRestPred = C.P.or_(identFirstPred, std.ascii.isDigit);
 
     const identParser = C.span(.IDENT, C.left(
         C.takeWhile(.N, .one, identFirstPred),
