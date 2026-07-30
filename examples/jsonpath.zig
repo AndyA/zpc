@@ -25,7 +25,7 @@ const JsonPathContext = struct {
     allocator: Allocator,
 };
 
-const C = zpc.Zpc(JsonPathContext.config);
+const C = zpc.Compiler(JsonPathContext.config);
 
 fn makeJsonPathParser() C.Parser {
     const intParser = C.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);

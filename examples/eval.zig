@@ -38,7 +38,7 @@ const Context = struct {
     expr: *const zpc.ParserType(config),
 };
 
-const C = zpc.Zpc(Context.config);
+const C = zpc.Compiler(Context.config);
 
 const skipSpace = C.takeWhile(.N, .zeroOrMore, std.ascii.isWhitespace);
 

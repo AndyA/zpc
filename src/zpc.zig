@@ -286,7 +286,7 @@ pub fn PredicateType(config: Config) type {
     return fn (char: config.Char) bool;
 }
 
-pub fn Zpc(config: Config) type {
+pub fn Compiler(config: Config) type {
     const Char = config.Char;
     const Tag = config.Tag;
     const Context = config.Context;
@@ -298,6 +298,7 @@ pub fn Zpc(config: Config) type {
         pub const Mapper = MapperType(config);
         pub const Predicate = PredicateType(config);
 
+        /// Predicate composers.
         pub const P = struct {
             /// A predicate that matches any char
             pub fn any_() Predicate {
@@ -309,7 +310,7 @@ pub fn Zpc(config: Config) type {
                 return shim.pred;
             }
 
-            /// A predicate that is the (short circuited) AND of two other
+            /// A predicate that is the (short circuited) `and` of two other
             /// predicates
             pub fn and_(a: Predicate, b: Predicate) Predicate {
                 const shim = struct {
@@ -320,7 +321,7 @@ pub fn Zpc(config: Config) type {
                 return shim.pred;
             }
 
-            /// A predicate that is the (short circuited) OR of two other
+            /// A predicate that is the (short circuited) `or` of two other
             /// predicates
             pub fn or_(a: Predicate, b: Predicate) Predicate {
                 const shim = struct {
@@ -773,7 +774,7 @@ const TestContext = struct {
 };
 
 const TestResult = ResultType(TestContext.config);
-const C = Zpc(TestContext.config);
+const C = Compiler(TestContext.config);
 
 fn checkAndConsume(
     ctx: TestContext,
@@ -1302,7 +1303,7 @@ test "ComptimeParsers" {
         };
     };
 
-    const CP = Zpc(Context.config);
+    const CP = Compiler(Context.config);
     const parseAlphaNum = CP.seq(.MULTI, &.{
         CP.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
         CP.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
