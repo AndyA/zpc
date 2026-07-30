@@ -20,11 +20,25 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
+    const lib = b.addLibrary(.{
+        .name = "zpc",
+        .root_module = mod,
+    });
+
     const mod_tests = b.addTest(.{
         .root_module = mod,
     });
     const run_mod_tests = b.addRunArtifact(mod_tests);
     test_step.dependOn(&run_mod_tests.step);
+
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = lib.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+
+    const docs_step = b.step("docs", "Generate documentation");
+    docs_step.dependOn(&install_docs.step);
 
     const coverage = b.option(bool, "coverage", "Enable zig-cov") orelse false;
     const rt_path = b.option([]const u8, "coverage-rt", "zig-cov-rt path") orelse null;

@@ -193,22 +193,11 @@ pub fn Space(Item: type) type {
                     }
                 };
 
-                /// The tag of this token. Tags are from the enumeration passed
-                /// when creating the Parsers
                 tag: Tag = NOP,
-                /// The token's value
                 value: union(enum(u8)) {
-                    /// An empty token. Unless it's the root token it will never appear
-                    /// in the parsed AST because it's discarded from `.list` and `.flat`
-                    /// tokens
                     nothing: void,
-                    /// A literal slice of text, often but not always a slice into the
-                    /// input text.
                     slice: []const Item,
-                    /// A list of child tokens.
                     list: []const Self,
-                    /// A list of child tokens that will be flattened into its parent
-                    /// list to unnest it.
                     flat: []const Self, // Like a list but flattens into its parent
                 },
 

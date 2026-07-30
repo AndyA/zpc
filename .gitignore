@@ -1,6 +1,5 @@
 /.zig-cache/
 /coverage.html
-/docs/
 /tmp/
 /zig-out/
 /zig-pkg/
