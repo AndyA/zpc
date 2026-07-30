@@ -784,7 +784,7 @@ pub fn Space(Item: type) type {
                                 return lres;
 
                             defer lres.deinit(ctx);
-                            ures.rest = lres.rest;
+                            ures.rest = lres.rest; // TODO surely redundant?
                             return ures;
                         }
                     };
