@@ -18,9 +18,11 @@ pub const Config = struct {
     Tag: type,
     /// The type of the context that is passed to parsers
     Context: type,
-    /// Whether generated parsers will be called at runtime (`.run`) or comptime (`.comp`)
+    /// Whether generated parsers will be called at runtime (`.run`) or
+    /// comptime (`.comp`)
     phase: Phase = .run,
-    /// The type of a character; may be any type that is supported by `std.mem.eql`
+    /// The type of a character; may be any type that is supported by
+    /// `std.mem.eql`
     Char: type = u8,
 };
 
@@ -201,8 +203,8 @@ pub fn TokenType(config: Config) type {
             };
         }
 
-        /// For a `.list` or `.flat` return the first child. Panics if
-        /// called on a non-list or an empty list
+        /// For a `.list` or `.flat` return the first child. Panics if called
+        /// on a non-list or an empty list
         pub fn head(self: Self) Self {
             return self.children()[0];
         }
@@ -214,8 +216,8 @@ pub fn TokenType(config: Config) type {
         }
 
         /// For a `.list` or `.flat` with precisely 2 elements return the
-        /// second element. Panics if called on a non-list or a list with
-        /// more or fewer than two elements.
+        /// second element. Panics if called on a non-list or a list with more
+        /// or fewer than two elements.
         pub fn other(self: Self) Self {
             const l = self.children();
             assert(l.len == 2);
@@ -549,9 +551,9 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Consume chars from input while `pred` returns true. Fails if the number
-        /// of matched chars falls outside the bounds of `quantifier`. The matched
-        /// chars are returned as a `.slice` token.
+        /// Consume chars from input while `pred` returns true. Fails if the
+        /// number of matched chars falls outside the bounds of `quantifier`.
+        /// The matched chars are returned as a `.slice` token.
         pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
             if (quantifier.min > quantifier.max)
                 @compileError("Bad quantifier");
@@ -604,9 +606,9 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Consume chars from input until `pred` returns true. Fails if the number
-        /// of matched chars falls outside the bounds of `quantifier`. The matched
-        /// chars are returned as a `.slice` token.
+        /// Consume chars from input until `pred` returns true. Fails if the
+        /// number of matched chars falls outside the bounds of `quantifier`.
+        /// The matched chars are returned as a `.slice` token.
         pub fn takeUntil(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
             return takeWhile(tag, quantifier, P.not_(pred));
         }
@@ -666,8 +668,8 @@ pub fn Compiler(config: Config) type {
             // TODO check hwm
         }
 
-        /// Try `parsers` in sequence returning a `.list` of their results if they
-        /// all succeed otherwise fail.
+        /// Try `parsers` in sequence returning a `.list` of their results if
+        /// they all succeed otherwise fail.
         pub fn seq(tag: Tag, parsers: []const *const Parser) Parser {
             if (parsers.len == 0)
                 @compileError("seq needs at least one parser");
