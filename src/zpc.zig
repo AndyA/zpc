@@ -1385,4 +1385,5 @@ fn checkAndConsume(
 
 test {
     _ = Compiler(TestContext.config);
+    _ = @import("zpc/line_index.zig");
 }
