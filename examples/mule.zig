@@ -4,9 +4,12 @@ const assert = std.debug.assert;
 const expectEqualDeep = std.testing.expectEqualDeep;
 
 pub fn main(_: std.process.Init) !void {
-    if (std.simd.suggestVectorLength(u8)) |vlen| {
-        print("Vector length for u8: {d}\n", .{vlen});
-    } else {
-        print("No vectors for you\n", .{});
+    const ints = &.{ u8, u16, u32, u64, u128, u256, u512, u1024 };
+    inline for (ints) |int| {
+        if (std.simd.suggestVectorLength(int)) |vlen| {
+            print("Vector length for {s}: {d}\n", .{ @typeName(int), vlen });
+        } else {
+            print("No {s} vectors for you\n", .{@typeName(int)});
+        }
     }
 }
