@@ -106,7 +106,10 @@ pub fn main(init: std.process.Init) !void {
     const jsonParser = makeJsonParser();
     const gapParser = C.left(skipSpace, C.optional(C.literal(",")));
     const jsonGapParser = C.left(jsonParser, gapParser);
-    const multiJsonParser = C.left(C.lower(C.many(.MULTI, .zeroOrMore, jsonGapParser)), C.eof());
+    const multiJsonParser = C.left(
+        C.lower(C.many(.MULTI, .zeroOrMore, jsonGapParser)),
+        C.left(skipSpace, C.eof()),
+    );
     const ctx: JsonContext = .{
         .allocator = init.gpa,
         .jsonParser = jsonParser,
