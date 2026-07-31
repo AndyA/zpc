@@ -48,22 +48,26 @@ pub fn countNewlines(T: type, text: []const T) u32 {
 
 test countNewlines {
     const maxInt = std.math.maxInt;
-    try expectEqual(0, countNewlines(u8, "Hello, World"));
-    try expectEqual(2, countNewlines(u8, "Hello, World\nGoodnight Berlin\n"));
-    try expectEqual(3, countNewlines(u8, "\n\n\n"));
-    try expectEqual(3, countNewlines(u8, "\r\r\r"));
-    try expectEqual(3, countNewlines(u8, "\r\n\r\n\r\n"));
-    try expectEqual(4, countNewlines(u8, "\n\r\n\r\n\r"));
-    try expectEqual(6, countNewlines(u8, "\r \n \r \n \r \n"));
+    const cnl = countNewlines;
+    try expectEqual(0, cnl(u8, "Hello, World"));
+    try expectEqual(2, cnl(u8, "Hello, World\nGoodnight Berlin\n"));
+    try expectEqual(3, cnl(u8, "\n\n\n"));
+    try expectEqual(3, cnl(u8, "\r\r\r"));
+    try expectEqual(3, cnl(u8, "\r\n\r\n\r\n"));
+    try expectEqual(4, cnl(u8, "\n\r\n\r\n\r"));
+    try expectEqual(6, cnl(u8, "\r \n \r \n \r \n"));
     const pad: [127]u8 = @splat('X');
-    try expectEqual(3, countNewlines(u8, "\n" ++ pad ++ "\n" ++ pad ++ "\n"));
-    try expectEqual(3, countNewlines(u8, "\r" ++ pad ++ "\r" ++ pad ++ "\r"));
-    try expectEqual(3, countNewlines(u8, "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n"));
-    try expectEqual(6, countNewlines(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
+    try expectEqual(3, cnl(u8, "\n" ++ pad ++ "\n" ++ pad ++ "\n"));
+    try expectEqual(3, cnl(u8, "\r" ++ pad ++ "\r" ++ pad ++ "\r"));
+    try expectEqual(3, cnl(u8, "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n"));
+    try expectEqual(6, cnl(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
 
-    try expectEqual(3, countNewlines(u21, &.{ '\r', '\r', '\r' }));
-    try expectEqual(3, countNewlines(u32, &.{ '\r', '\r', '\r' }));
-    try expectEqual(3, countNewlines(u32, &.{ '\r', maxInt(u32), '\r', maxInt(u32), '\r' }));
+    try expectEqual(3, cnl(u21, &.{ '\r', '\r', '\r' }));
+    try expectEqual(3, cnl(u32, &.{ '\r', '\r', '\r' }));
+    try expectEqual(3, cnl(
+        u32,
+        &.{ '\r', maxInt(u32), '\r', maxInt(u32), '\r' },
+    ));
 }
 
 pub fn LineIndex(T: type) type {
