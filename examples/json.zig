@@ -117,11 +117,11 @@ pub fn main(init: std.process.Init) !void {
     const res = try multiJsonParser(ctx,
         \\{
         \\  "things": [ -12.3e+99, 0, false, "Hello\n", [], {} ],
-        \\  "sample": [ {}, [], -1e7, false, true, null ],
         \\  "name": "Andy",
         \\  "tags": ["A", "B", "C", ["nested", ["deeper"]]],
         \\  "empty": [""]
         \\}
+        \\{"id":1} {"id":2} {"id":3}
     );
     defer res.deinit(ctx);
     print("{f}", .{res.pretty()});
