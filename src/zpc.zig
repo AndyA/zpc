@@ -159,7 +159,11 @@ pub fn TokenType(config: Config) type {
             return initList(input, tag, list);
         }
 
-        pub fn appendToArrayList(self: Self, ctx: Context, array: *ArrayList) Error!void {
+        pub fn appendToArrayList(
+            self: Self,
+            ctx: Context,
+            array: *ArrayList,
+        ) Error!void {
             switch (self.value) {
                 .nothing => {},
                 .slice, .list => try array.append(getAlloc(ctx), self),
@@ -242,7 +246,10 @@ pub fn ResultType(config: Config) type {
                 const token = self.token;
                 switch (token.tok) {
                     .ok => |ok| {
-                        const formatter = Token.Formatter{ .token = &ok, .pretty = self.pretty };
+                        const formatter = Token.Formatter{
+                            .token = &ok,
+                            .pretty = self.pretty,
+                        };
                         try formatter.format(writer);
                     },
                     .fail => |fail| {
@@ -322,7 +329,11 @@ pub fn ParserType(config: Config) type {
 
 pub fn MapperType(config: Config) type {
     const Result = ResultType(config);
-    return fn (ctx: config.Context, input: []const config.Char, result: Result) Error!Result;
+    return fn (
+        ctx: config.Context,
+        input: []const config.Char,
+        result: Result,
+    ) Error!Result;
 }
 
 pub fn PredicateType(config: Config) type {
@@ -400,7 +411,12 @@ pub fn Compiler(config: Config) type {
             pub fn set_(charset: []const Char) Predicate {
                 const shim = struct {
                     fn pred(char: Char) bool {
-                        return std.mem.containsAtLeastScalar(config.Char, charset, char, 1);
+                        return std.mem.containsAtLeastScalar(
+                            config.Char,
+                            charset,
+                            char,
+                            1,
+                        );
                     }
                 };
                 return shim.pred;
@@ -415,7 +431,10 @@ pub fn Compiler(config: Config) type {
                 fn keywordParser(_: Context, input: []const Char) Error!Result {
                     if (input.len >= str.len and
                         std.mem.eql(Char, input[0..str.len], str))
-                        return .initOk(.initSlice(input, tag, str), input[str.len..]);
+                        return .initOk(
+                            .initSlice(input, tag, str),
+                            input[str.len..],
+                        );
                     return .initFailHere(input);
                 }
             };
@@ -467,8 +486,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Succeed with a token tagged with `NOP` (the zeroeth `Tag`) if `str` is
-        /// the next input.
+        /// Succeed with a token tagged with `NOP` (the zeroeth `Tag`) if `str`
+        /// is the next input.
         pub fn literal(str: []const Char) Parser {
             return keyword(Token.NOP, str);
         }
@@ -567,7 +586,10 @@ pub fn Compiler(config: Config) type {
                         pos += 1;
                     if (pos < quantifier.min)
                         return .initFail(input[pos..], input);
-                    return .initOk(.initSlice(input, tag, input[0..pos]), input[pos..]);
+                    return .initOk(
+                        .initSlice(input, tag, input[0..pos]),
+                        input[pos..],
+                    );
                 }
             };
             return shim.takeWhileParser;
@@ -688,7 +710,10 @@ pub fn Compiler(config: Config) type {
                         try res.tok.ok.appendToArrayList(ctx, &list);
                     }
 
-                    return .initOk(try .initArrayList(ctx, input, tag, &list), tail);
+                    return .initOk(
+                        try .initArrayList(ctx, input, tag, &list),
+                        tail,
+                    );
                 }
             };
             return shim.seqParser;
@@ -714,8 +739,8 @@ pub fn Compiler(config: Config) type {
             // TODO fail
         }
 
-        /// If `left_parser` and `right_parser` succeed in sequence return the left
-        /// result and discard the right.
+        /// If `left_parser` and `right_parser` succeed in sequence return the
+        /// left result and discard the right.
         pub fn left(left_parser: Parser, right_parser: Parser) Parser {
             const shim = struct {
                 fn leftParser(ctx: Context, input: []const Char) Error!Result {
@@ -760,8 +785,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `left_parser` and `right_parser` succeed in sequence return the right
-        /// result and discard the left.
+        /// If `left_parser` and `right_parser` succeed in sequence return the
+        /// right result and discard the left.
         pub fn right(left_parser: Parser, right_parser: Parser) Parser {
             const shim = struct {
                 fn rightParser(ctx: Context, input: []const Char) Error!Result {
@@ -802,9 +827,14 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `left_parser`, `parser` and `right_parser` succeed in sequence return
-        /// the result of `parser` and discard the left and right results.
-        pub fn between(left_parser: Parser, parser: Parser, right_parser: Parser) Parser {
+        /// If `left_parser`, `parser` and `right_parser` succeed in sequence
+        /// return the result of `parser` and discard the left and right
+        /// results.
+        pub fn between(
+            left_parser: Parser,
+            parser: Parser,
+            right_parser: Parser,
+        ) Parser {
             return left(right(left_parser, parser), right_parser);
         }
 
@@ -835,8 +865,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Apply `parser` until it fails or reaches `quantifier.max` matches and
-        /// collect the results as a `.list` token.
+        /// Apply `parser` until it fails or reaches `quantifier.max` matches
+        /// and collect the results as a `.list` token.
         pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
             if (quantifier.min > quantifier.max)
                 @compileError("Bad quantifier");
@@ -856,7 +886,10 @@ pub fn Compiler(config: Config) type {
                         tail = res.rest;
                         try res.tok.ok.appendToArrayList(ctx, &list);
                     }
-                    return .initOk(try .initArrayList(ctx, input, tag, &list), tail);
+                    return .initOk(
+                        try .initArrayList(ctx, input, tag, &list),
+                        tail,
+                    );
                 }
             };
             return shim.manyParser;
@@ -898,8 +931,9 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `parser` succeeds, discard its result and replace it with a `.nothing`
-        /// token (which won't appear in the AST unless it's at the root).
+        /// If `parser` succeeds, discard its result and replace it with a
+        /// `.nothing` token (which won't appear in the AST unless it's at the
+        /// root).
         pub fn optional(parser: Parser) Parser {
             const shim = struct {
                 fn optionalParser(ctx: Context, input: []const Char) Error!Result {
@@ -932,8 +966,9 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `parser` succeeds pass the result through `mapper`. It's the responsibity
-        /// of the mapper to free any parts of the result that it doesn't return.
+        /// If `parser` succeeds pass the result through `mapper`. It's the
+        /// responsibity of the mapper to free any parts of the result that it
+        /// doesn't return.
         pub fn map(parser: Parser, mapper: Mapper) Parser {
             const shim = struct {
                 fn mapParser(ctx: Context, input: []const Char) Error!Result {
@@ -943,9 +978,10 @@ pub fn Compiler(config: Config) type {
             return shim.mapParser;
         }
 
-        /// If `parser` succeeds pass the result through `mapper`. The result is temporary
-        /// and will be freed automatically so `mapper` must create a new result that doesn't
-        /// depend on any part of the result it's passed.
+        /// If `parser` succeeds pass the result through `mapper`. The result
+        /// is temporary and will be freed automatically so `mapper` must
+        /// create a new result that doesn't depend on any part of the result
+        /// it's passed.
         pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
             const shim = switch (config.phase) {
                 .comp => struct {
@@ -966,9 +1002,10 @@ pub fn Compiler(config: Config) type {
             return shim.mapParser;
         }
 
-        /// If `parser` succeeds, discard its result and return a `.nothing` token
-        /// in its place. At any level of nesting other than the root of the AST
-        /// `.nothing` tokens are discarded and won't appear in the result.
+        /// If `parser` succeeds, discard its result and return a `.nothing`
+        /// token in its place. At any level of nesting other than the root of
+        /// the AST `.nothing` tokens are discarded and won't appear in the
+        /// result.
         pub fn discard(parser: Parser) Parser {
             const shim = struct {
                 fn disardMapper(
@@ -1002,8 +1039,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `parser` succeeds return a `.slice` token containing the whole of the
-        /// matched text, tagged with `tag`.
+        /// If `parser` succeeds return a `.slice` token containing the whole
+        /// of the matched text, tagged with `tag`.
         pub fn span(tag: Tag, parser: Parser) Parser {
             const shim = struct {
                 fn spanMapper(
@@ -1013,7 +1050,10 @@ pub fn Compiler(config: Config) type {
                 ) Error!Result {
                     if (!res.succeeded()) return .initFail(res.tok.fail, input);
                     const consumed: usize = input.len - res.rest.len;
-                    return .initOk(.initSlice(input, tag, input[0..consumed]), res.rest);
+                    return .initOk(
+                        .initSlice(input, tag, input[0..consumed]),
+                        res.rest,
+                    );
                 }
             };
 
@@ -1033,8 +1073,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `parser` returns a `.list` modify it so that it will flatten into the
-        /// parent token.
+        /// If `parser` returns a `.list` modify it so that it will flatten
+        /// into the parent token.
         pub fn flat(parser: Parser) Parser {
             const shim = struct {
                 fn flatParser(ctx: Context, input: []const Char) Error!Result {
@@ -1088,8 +1128,8 @@ pub fn Compiler(config: Config) type {
         }
 
         /// Fail unless `parser` succeeds _and_ moves forwards in the text.
-        /// This is useful to wrap any composition of `zeroOrMore` parsers
-        /// to ensure that at least one of them made progress.
+        /// This is useful to wrap any composition of `zeroOrMore` parsers to
+        /// ensure that at least one of them made progress.
         pub fn advances(parser: Parser) Parser {
             const shim = struct {
                 fn advancesParser(ctx: Context, input: []const Char) Error!Result {
@@ -1122,8 +1162,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If the result is a single element `.list` lower the result to its first
-        /// element.
+        /// If the result is a single element `.list` lower the result to its
+        /// first element.
         pub fn lower(parser: Parser) Parser {
             const shim = struct {
                 fn lowerParser(ctx: Context, input: []const Char) Error!Result {
@@ -1146,7 +1186,11 @@ pub fn Compiler(config: Config) type {
         }
 
         test lower {
-            const parseLower = C.lower(C.many(.MULTI, .oneOrMore, C.keyword(.FOO, "Foo")));
+            const parseLower = C.lower(C.many(
+                .MULTI,
+                .oneOrMore,
+                C.keyword(.FOO, "Foo"),
+            ));
             const parseFlatLower = C.flat(parseLower);
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
@@ -1187,7 +1231,10 @@ pub fn Compiler(config: Config) type {
                         return lres;
 
                     const consumed: usize = input.len - lres.rest.len;
-                    var ures = try left(upper_parser, eof())(ctx, input[0..consumed]);
+                    var ures = try left(upper_parser, eof())(
+                        ctx,
+                        input[0..consumed],
+                    );
 
                     if (!ures.succeeded())
                         return lres;
@@ -1230,8 +1277,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Call a parser pointed to by the field `field_name` in the context. This makes
-        /// it possible to create recursive parsers.
+        /// Call a parser pointed to by the field `field_name` in the context.
+        /// This makes it possible to create recursive parsers.
         pub fn recurse(field_name: []const Char) Parser {
             if (!@hasField(Context, field_name))
                 @compileError("Context has no field called " ++ field_name);
@@ -1246,7 +1293,11 @@ pub fn Compiler(config: Config) type {
 
         test recurse {
             const parseDigits = C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit);
-            const skipSpace = C.takeWhile(C.Token.NOP, .zeroOrMore, std.ascii.isWhitespace);
+            const skipSpace = C.takeWhile(
+                C.Token.NOP,
+                .zeroOrMore,
+                std.ascii.isWhitespace,
+            );
 
             const parseAtom = C.right(skipSpace, C.alt(&.{
                 C.between(C.literal("("), C.recurse("expr"), C.literal(")")),
@@ -1257,7 +1308,10 @@ pub fn Compiler(config: Config) type {
                 C.seq(.TERM, &.{
                     parseAtom,
                     C.many(.MANY, .zeroOrMore, C.seq(.SEQ, &.{
-                        C.right(skipSpace, C.alt(&.{ C.keyword(.PLUS, "+"), C.keyword(.MINUS, "-") })),
+                        C.right(skipSpace, C.alt(&.{
+                            C.keyword(.PLUS, "+"),
+                            C.keyword(.MINUS, "-"),
+                        })),
                         parseAtom,
                     })),
                 });
@@ -1279,27 +1333,31 @@ pub fn Compiler(config: Config) type {
             );
 
             const expr = "(123 + 7) - 2 + 700;";
-            const want: C.Result = .initOk(.initList("(123 + 7) - 2 + 700;", .TERM, &.{
-                .initList("123 + 7) - 2 + 700;", .TERM, &.{
-                    .initSlice("123 + 7) - 2 + 700;", .DIGIT, "123"),
-                    .initList(" + 7) - 2 + 700;", .MANY, &.{
-                        .initList(" + 7) - 2 + 700;", .SEQ, &.{
-                            .initSlice("+ 7) - 2 + 700;", .PLUS, "+"),
-                            .initSlice("7) - 2 + 700;", .DIGIT, "7"),
+            const want: C.Result = .initOk(.initList(
+                "(123 + 7) - 2 + 700;",
+                .TERM,
+                &.{
+                    .initList("123 + 7) - 2 + 700;", .TERM, &.{
+                        .initSlice("123 + 7) - 2 + 700;", .DIGIT, "123"),
+                        .initList(" + 7) - 2 + 700;", .MANY, &.{
+                            .initList(" + 7) - 2 + 700;", .SEQ, &.{
+                                .initSlice("+ 7) - 2 + 700;", .PLUS, "+"),
+                                .initSlice("7) - 2 + 700;", .DIGIT, "7"),
+                            }),
                         }),
                     }),
-                }),
-                .initList(" - 2 + 700;", .MANY, &.{
-                    .initList(" - 2 + 700;", .SEQ, &.{
-                        .initSlice("- 2 + 700;", .MINUS, "-"),
-                        .initSlice("2 + 700;", .DIGIT, "2"),
+                    .initList(" - 2 + 700;", .MANY, &.{
+                        .initList(" - 2 + 700;", .SEQ, &.{
+                            .initSlice("- 2 + 700;", .MINUS, "-"),
+                            .initSlice("2 + 700;", .DIGIT, "2"),
+                        }),
+                        .initList(" + 700;", .SEQ, &.{
+                            .initSlice("+ 700;", .PLUS, "+"),
+                            .initSlice("700;", .DIGIT, "700"),
+                        }),
                     }),
-                    .initList(" + 700;", .SEQ, &.{
-                        .initSlice("+ 700;", .PLUS, "+"),
-                        .initSlice("700;", .DIGIT, "700"),
-                    }),
-                }),
-            }), ";");
+                },
+            ), ";");
 
             if (false) {
                 const res = try parseExpr(ctx, expr);
