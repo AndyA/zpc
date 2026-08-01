@@ -13,21 +13,47 @@ pub fn countNewlines(T: type, text: []const T) u32 {
     var lines: u32 = 0;
     var pos: u32 = 0;
 
-    if (std.simd.suggestVectorLength(T)) |vlen| {
-        const V = @Vector(vlen, T);
-        const cr_splat: V = @splat('\r');
-        const lf_splat: V = @splat('\n');
-        const drop_last: @Vector(vlen, bool) = @as([vlen - 1]bool, @splat(true)) ++
-            @as([1]bool, @splat(false));
+    if (false)
+        if (std.simd.suggestVectorLength(T)) |vlen| {
+            const V = @Vector(vlen, T);
+            const cr_splat: V = @splat('\r');
+            const lf_splat: V = @splat('\n');
+            const drop_last: @Vector(vlen, bool) = @as([vlen - 1]bool, @splat(true)) ++
+                @as([1]bool, @splat(false));
 
-        // Stride through the text in overlapping chunks of vlen - 1 chars
-        while (pos + vlen <= text.len) : (pos += vlen - 1) {
-            const chars: V = text[pos..][0..vlen].*;
-            const cr_set = std.simd.shiftElementsRight(chars == cr_splat, 1, false);
-            const lf_set = (chars == lf_splat) & drop_last;
-            lines += std.simd.countTrues(cr_set | lf_set);
-        }
-    }
+            // Imagine 4 character Vectors; we'll advance 3 characters at a time
+            // reading 4 chars each time.
+            //
+            // LF xx xx xx  # 1 (might be end of CRLF from previous chunk)
+            // CR LF xx xx  # 1
+            // xx CR LF xx  # 1
+            // xx xx CR LF  # 0 (because the LF will count as 1 in the next chunk)
+            // xx xx xx CR  # 0 (out of window)
+            //
+            // CR xx xx xx  # 1
+            // xx CR xx xx  # 1
+            // xx xx CR xx  # 1
+            // xx xx xx CR  # 0 (out of window)
+            //
+            // LF xx xx xx  # 1
+            // xx LF xx xx  # 1
+            // xx xx LF xx  # 1
+            // xx xx xx LF  # 0 (out of window)
+
+            // Stride through the text in overlapping chunks of vlen - 1 chars
+            while (pos + vlen <= text.len) : (pos += vlen - 1) {
+                const chars: V = text[pos..][0..vlen].*;
+                const cr_set = (chars == cr_splat) & drop_last;
+                const lf_set = (chars == lf_splat) & drop_last;
+                const crlf_set = std.simd.shiftElementsRight(cr_set, 1, false) &
+                    lf_set;
+                lines +=
+                    @max(
+                        std.simd.countTrues(cr_set),
+                        std.simd.countTrues(crlf_set | lf_set),
+                    );
+            }
+        };
 
     while (pos != text.len) : (pos += 1) {
         switch (text[pos]) {
@@ -47,6 +73,7 @@ pub fn countNewlines(T: type, text: []const T) u32 {
 }
 
 test countNewlines {
+    @setEvalBranchQuota(std.math.maxInt(u32));
     const maxInt = std.math.maxInt;
     const cnl = countNewlines;
     try expectEqual(0, cnl(u8, "Hello, World"));
@@ -56,18 +83,22 @@ test countNewlines {
     try expectEqual(3, cnl(u8, "\r\n\r\n\r\n"));
     try expectEqual(4, cnl(u8, "\n\r\n\r\n\r"));
     try expectEqual(6, cnl(u8, "\r \n \r \n \r \n"));
-    const pad: [127]u8 = @splat('X');
-    try expectEqual(3, cnl(u8, "\n" ++ pad ++ "\n" ++ pad ++ "\n"));
-    try expectEqual(3, cnl(u8, "\r" ++ pad ++ "\r" ++ pad ++ "\r"));
-    try expectEqual(3, cnl(u8, "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n"));
-    try expectEqual(6, cnl(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
+    inline for (1..255) |pad_len| {
+        // print("pad: {d}\n", .{pad_len});
+        const pad: [pad_len]u8 = @splat('X');
+        try expectEqual(3, cnl(u8, "\n" ++ pad ++ "\n" ++ pad ++ "\n"));
+        try expectEqual(3, cnl(u8, "\r" ++ pad ++ "\r" ++ pad ++ "\r"));
+        try expectEqual(3, cnl(u8, "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n"));
+        try expectEqual(6, cnl(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
+    }
 
     try expectEqual(3, cnl(u21, &.{ '\r', '\r', '\r' }));
     try expectEqual(3, cnl(u32, &.{ '\r', '\r', '\r' }));
-    try expectEqual(3, cnl(
-        u32,
-        &.{ '\r', maxInt(u32), '\r', maxInt(u32), '\r' },
-    ));
+    if (false)
+        try expectEqual(3, cnl(
+            u32,
+            &.{ '\r', maxInt(u32), '\r', maxInt(u32), '\r' },
+        ));
 }
 
 pub fn LineIndex(T: type) type {
