@@ -75,11 +75,10 @@ test countNewlines {
 
     try expectEqual(3, cnl(u21, &.{ '\r', '\r', '\r' }));
     try expectEqual(3, cnl(u32, &.{ '\r', '\r', '\r' }));
-    if (false)
-        try expectEqual(3, cnl(
-            u32,
-            &.{ '\r', maxInt(u32), '\r', maxInt(u32), '\r' },
-        ));
+    try expectEqual(3, cnl(
+        u32,
+        &.{ '\r', maxInt(u32), '\r', maxInt(u32), '\r' },
+    ));
 }
 
 pub fn LineIndex(T: type) type {
