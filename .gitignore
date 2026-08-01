@@ -1,6 +1,6 @@
 /.zig-cache/
+/Session.vim
 /coverage.html
 /tmp/
 /zig-out/
 /zig-pkg/
-*.a
