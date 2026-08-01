@@ -25,7 +25,7 @@ pub fn countNewlines(T: type, text: []const T) u32 {
             const chars: V = text[pos..][0..vlen].*;
             const cr_set = std.simd.shiftElementsRight(chars == cr_splat, 1, false);
             const lf_set = chars == lf_splat;
-            const all_set = ((lf_set & drop_last) | cr_set) & ~(lf_set & ~drop_last);
+            const all_set = lf_set & drop_last | cr_set & ~(lf_set & ~drop_last);
             lines += std.simd.countTrues(all_set);
         }
     }
@@ -56,7 +56,7 @@ test countNewlines {
     try expectEqual(3, cnl(u8, "\n\n\n"));
     try expectEqual(3, cnl(u8, "\r\r\r"));
     try expectEqual(3, cnl(u8, "\r\n\r\n\r\n"));
-    try expectEqual(4, cnl(u8, "\n\r\n\r\n\r")); // odd framing: LF CRLF CRLF CR
+    try expectEqual(4, cnl(u8, "\n\r\n\r\n\r"));
     try expectEqual(6, cnl(u8, "\r \n \r \n \r \n"));
 
     // Permutations of padding to stress SIMD version.
