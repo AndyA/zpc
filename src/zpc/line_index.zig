@@ -13,62 +13,22 @@ pub fn countNewlines(T: type, text: []const T) u32 {
     var lines: u32 = 0;
     var pos: u32 = 0;
 
-    if (false)
-        if (std.simd.suggestVectorLength(T)) |vlen| {
-            const V = @Vector(vlen, T);
-            const cr_splat: V = @splat('\r');
-            const lf_splat: V = @splat('\n');
-            const drop_last: @Vector(vlen, bool) = @as([vlen - 1]bool, @splat(true)) ++
-                @as([1]bool, @splat(false));
+    if (std.simd.suggestVectorLength(T)) |vlen| {
+        const V = @Vector(vlen, T);
+        const cr_splat: V = @splat('\r');
+        const lf_splat: V = @splat('\n');
+        const drop_last: @Vector(vlen, bool) = @as([vlen - 1]bool, @splat(true)) ++
+            @as([1]bool, @splat(false));
 
-            // Imagine 4 character Vectors; we'll advance 3 characters at a time
-            // reading 4 chars each time.
-            //
-            // LF xx xx xx  # 1 (might be end of CRLF from previous chunk)
-            //   lf:    TFFF
-            //   cr:    FFFF
-            //   lfcr:  FFFF
-            // CR LF xx xx  # 1
-            //   lf:    FTFF
-            //   cr:    TFFF
-            //   crlf:  FTFF
-            // xx CR LF xx  # 1
-            //   lf:    FFTF
-            //   cr:    FTFF
-            //   crlf:  FFTF
-            // xx xx CR LF  # 0 (because the LF will count as 1 in the next chunk)
-            //   lf:    FFFT
-            //   cr:    FFTF
-            //   crlf:  FFFT
-            // xx xx xx CR  # 0 (out of window)
-            //   lf:    FFFF
-            //   cr:    FFFT
-            //   crlf:  FFFF
-            //
-            // CR xx xx xx  # 1
-            // xx CR xx xx  # 1
-            // xx xx CR xx  # 1
-            // xx xx xx CR  # 0 (out of window)
-            //
-            // LF xx xx xx  # 1
-            // xx LF xx xx  # 1
-            // xx xx LF xx  # 1
-            // xx xx xx LF  # 0 (out of window)
-
-            // Stride through the text in overlapping chunks of vlen - 1 chars
-            while (pos + vlen <= text.len) : (pos += vlen - 1) {
-                const chars: V = text[pos..][0..vlen].*;
-                const cr_set = chars == cr_splat;
-                const lf_set = chars == lf_splat;
-                const crlf_set = std.simd.shiftElementsRight(cr_set, 1, false);
-                const all_set =
-                    std.simd.shiftElementsRight(cr_set, 1, false) |
-                    lf_set |
-                    crlf_set;
-                lines +=
-                    std.simd.countTrues(all_set & drop_last);
-            }
-        };
+        // Stride through the text in overlapping chunks of vlen - 1 chars
+        while (pos + vlen <= text.len) : (pos += vlen - 1) {
+            const chars: V = text[pos..][0..vlen].*;
+            const cr_set = std.simd.shiftElementsRight(chars == cr_splat, 1, false);
+            const lf_set = chars == lf_splat;
+            const all_set = ((lf_set & drop_last) | cr_set) & ~(lf_set & ~drop_last);
+            lines += std.simd.countTrues(all_set);
+        }
+    }
 
     while (pos != text.len) : (pos += 1) {
         switch (text[pos]) {
