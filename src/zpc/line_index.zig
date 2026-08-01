@@ -60,7 +60,7 @@ test countNewlines {
     try expectEqual(4, cnl(u8, "\n\r\n\r\n\r"));
     try expectEqual(6, cnl(u8, "\r \n \r \n \r \n"));
 
-    // Permutations of padding to stress SIMD version.
+    // Permutations of padding, type to stress SIMD version.
     inline for (.{ u8, u9, u16, u21, u32 }) |T| {
         const LF: []const T = &.{'\n'};
         const CR: []const T = &.{'\r'};
