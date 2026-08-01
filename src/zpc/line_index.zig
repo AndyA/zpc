@@ -8,7 +8,8 @@ const expectEqual = std.testing.expectEqual;
 const expectEqualDeep = std.testing.expectEqualDeep;
 const Allocator = std.mem.Allocator;
 
-/// Count the number of newlines in a text
+/// Count the number of newlines in a text. A newline is defined as LF, CR or CRLF. We
+/// don't allow LFCR because we're not barbarians.
 pub fn countNewlines(T: type, text: []const T) u32 {
     var lines: u32 = 0;
     var pos: u32 = 0;
@@ -25,7 +26,7 @@ pub fn countNewlines(T: type, text: []const T) u32 {
             const chars: V = text[pos..][0..vlen].*;
             const cr_set = std.simd.shiftElementsRight(chars == cr_splat, 1, false);
             const lf_set = chars == lf_splat;
-            const all_set = lf_set & drop_last | cr_set & ~(lf_set & ~drop_last);
+            const all_set = lf_set & drop_last | cr_set & (~lf_set | drop_last);
             lines += std.simd.countTrues(all_set);
         }
     }
