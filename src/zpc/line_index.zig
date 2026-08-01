@@ -64,7 +64,7 @@ test countNewlines {
         try expectEqual(3, cnl(u8, "\n" ++ pad ++ "\n" ++ pad ++ "\n"));
         try expectEqual(3, cnl(u8, "\r" ++ pad ++ "\r" ++ pad ++ "\r"));
         try expectEqual(3, cnl(u8, "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n"));
-        // try expectEqual(6, cnl(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
+        try expectEqual(6, cnl(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
     }
 
     try expectEqual(3, cnl(u21, &.{ '\r', '\r', '\r' }));
