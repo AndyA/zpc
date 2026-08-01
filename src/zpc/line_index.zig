@@ -56,7 +56,7 @@ test countNewlines {
     try expectEqual(3, cnl(u8, "\n\n\n"));
     try expectEqual(3, cnl(u8, "\r\r\r"));
     try expectEqual(3, cnl(u8, "\r\n\r\n\r\n"));
-    try expectEqual(4, cnl(u8, "\n\r\n\r\n\r"));
+    try expectEqual(4, cnl(u8, "\n\r\n\r\n\r")); // odd framing: LF CRLF CRLF CR
     try expectEqual(6, cnl(u8, "\r \n \r \n \r \n"));
 
     // Permutations of padding to stress SIMD version.
