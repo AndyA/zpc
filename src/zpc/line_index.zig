@@ -58,25 +58,18 @@ test countNewlines {
     try expectEqual(3, cnl(u8, "\r\n\r\n\r\n"));
     try expectEqual(4, cnl(u8, "\n\r\n\r\n\r"));
     try expectEqual(6, cnl(u8, "\r \n \r \n \r \n"));
+
+    // Permutations of padding to stress SIMD version.
     inline for (1..255) |pad_len| {
-        // print("pad: {d}\n", .{pad_len});
         const pad: [pad_len]u8 = @splat('X');
-        try expectEqual(3, cnl(u8, "\n" ++ pad ++ "\n" ++ pad ++ "\n"));
-        try expectEqual(3, cnl(u8, "\r" ++ pad ++ "\r" ++ pad ++ "\r"));
-        try expectEqual(3, cnl(u8, "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n"));
-        try expectEqual(6, cnl(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
-        try expectEqual(3, cnl(u8, pad ++ "\n" ++ pad ++ "\n" ++ pad ++ "\n"));
-        try expectEqual(3, cnl(u8, pad ++ "\r" ++ pad ++ "\r" ++ pad ++ "\r"));
-        try expectEqual(3, cnl(u8, pad ++ "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n"));
-        try expectEqual(6, cnl(u8, pad ++ "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r"));
-        try expectEqual(3, cnl(u8, "\n" ++ pad ++ "\n" ++ pad ++ "\n" ++ pad));
-        try expectEqual(3, cnl(u8, "\r" ++ pad ++ "\r" ++ pad ++ "\r" ++ pad));
-        try expectEqual(3, cnl(u8, "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n" ++ pad));
-        try expectEqual(6, cnl(u8, "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r" ++ pad));
-        try expectEqual(3, cnl(u8, pad ++ "\n" ++ pad ++ "\n" ++ pad ++ "\n" ++ pad));
-        try expectEqual(3, cnl(u8, pad ++ "\r" ++ pad ++ "\r" ++ pad ++ "\r" ++ pad));
-        try expectEqual(3, cnl(u8, pad ++ "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n" ++ pad));
-        try expectEqual(6, cnl(u8, pad ++ "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r" ++ pad));
+        inline for (.{ "", pad }) |left_pad| {
+            inline for (.{ "", pad }) |right_pad| {
+                try expectEqual(3, cnl(u8, left_pad ++ "\n" ++ pad ++ "\n" ++ pad ++ "\n" ++ right_pad));
+                try expectEqual(3, cnl(u8, left_pad ++ "\r" ++ pad ++ "\r" ++ pad ++ "\r" ++ right_pad));
+                try expectEqual(3, cnl(u8, left_pad ++ "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n" ++ right_pad));
+                try expectEqual(6, cnl(u8, left_pad ++ "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r" ++ right_pad));
+            }
+        }
     }
 
     try expectEqual(3, cnl(u21, &.{ '\r', '\r', '\r' }));
