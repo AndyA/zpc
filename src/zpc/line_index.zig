@@ -61,14 +61,20 @@ test countNewlines {
     try expectEqual(6, cnl(u8, "\r \n \r \n \r \n"));
 
     // Permutations of padding to stress SIMD version.
-    inline for (1..255) |pad_len| {
-        const pad: [pad_len]u8 = @splat('X');
-        inline for (.{ "", pad }) |lp| {
-            inline for (.{ "", pad }) |rp| {
-                try expectEqual(3, cnl(u8, lp ++ "\n" ++ pad ++ "\n" ++ pad ++ "\n" ++ rp));
-                try expectEqual(3, cnl(u8, lp ++ "\r" ++ pad ++ "\r" ++ pad ++ "\r" ++ rp));
-                try expectEqual(3, cnl(u8, lp ++ "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n" ++ rp));
-                try expectEqual(6, cnl(u8, lp ++ "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r" ++ rp));
+    inline for (.{ u8, u9, u16, u21, u32 }) |T| {
+        const LF: []const T = &.{'\n'};
+        const CR: []const T = &.{'\r'};
+        const CRLF = CR ++ LF;
+        const LFCR = LF ++ CR;
+        inline for (1..65) |pad_len| {
+            const pad: [pad_len]T = @splat('X');
+            inline for (.{ "", pad }) |lp| {
+                inline for (.{ "", pad }) |rp| {
+                    try expectEqual(3, cnl(T, lp ++ LF ++ pad ++ LF ++ pad ++ LF ++ rp));
+                    try expectEqual(3, cnl(T, lp ++ CR ++ pad ++ CR ++ pad ++ CR ++ rp));
+                    try expectEqual(3, cnl(T, lp ++ CRLF ++ pad ++ CRLF ++ pad ++ CRLF ++ rp));
+                    try expectEqual(6, cnl(T, lp ++ LFCR ++ pad ++ LFCR ++ pad ++ LFCR ++ rp));
+                }
             }
         }
     }
