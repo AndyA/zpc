@@ -9,7 +9,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 const Allocator = std.mem.Allocator;
 
 /// Count the number of newlines in a text. A newline is defined as LF, CR or CRLF. We
-/// don't allow LFCR because we're not barbarians.
+/// count LFCR as LF, CR because we're not barbarians.
 pub fn countNewlines(T: type, text: []const T) u32 {
     var lines: u32 = 0;
     var pos: u32 = 0;
