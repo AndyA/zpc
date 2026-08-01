@@ -62,12 +62,12 @@ test countNewlines {
     // Permutations of padding to stress SIMD version.
     inline for (1..255) |pad_len| {
         const pad: [pad_len]u8 = @splat('X');
-        inline for (.{ "", pad }) |left_pad| {
-            inline for (.{ "", pad }) |right_pad| {
-                try expectEqual(3, cnl(u8, left_pad ++ "\n" ++ pad ++ "\n" ++ pad ++ "\n" ++ right_pad));
-                try expectEqual(3, cnl(u8, left_pad ++ "\r" ++ pad ++ "\r" ++ pad ++ "\r" ++ right_pad));
-                try expectEqual(3, cnl(u8, left_pad ++ "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n" ++ right_pad));
-                try expectEqual(6, cnl(u8, left_pad ++ "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r" ++ right_pad));
+        inline for (.{ "", pad }) |lp| {
+            inline for (.{ "", pad }) |rp| {
+                try expectEqual(3, cnl(u8, lp ++ "\n" ++ pad ++ "\n" ++ pad ++ "\n" ++ rp));
+                try expectEqual(3, cnl(u8, lp ++ "\r" ++ pad ++ "\r" ++ pad ++ "\r" ++ rp));
+                try expectEqual(3, cnl(u8, lp ++ "\r\n" ++ pad ++ "\r\n" ++ pad ++ "\r\n" ++ rp));
+                try expectEqual(6, cnl(u8, lp ++ "\n\r" ++ pad ++ "\n\r" ++ pad ++ "\n\r" ++ rp));
             }
         }
     }
