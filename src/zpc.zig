@@ -935,6 +935,7 @@ pub fn Compiler(config: Config) type {
         /// `.nothing` token (which won't appear in the AST unless it's at the
         /// root).
         pub fn optional(parser: Parser) Parser {
+            // TODO discard == optional?
             const shim = struct {
                 fn optionalParser(ctx: Context, input: []const Char) Error!Result {
                     const res = try parser(ctx, input);
@@ -977,10 +978,10 @@ pub fn Compiler(config: Config) type {
             return shim.mapParser;
         }
 
-        /// Pass the result of `parser` through `mapper`. The result is
-        /// temporary and will be freed automatically so `mapper` must create a
-        /// new result that doesn't depend on any part of the result it's
-        /// passed.
+        /// Pass the result of `parser` through `mapper`. The result
+        /// is temporary and will be freed automatically so `mapper` must
+        /// create a new result that doesn't depend on any part of the result
+        /// it's passed.
         pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
             const shim = switch (config.phase) {
                 .comp => struct {
@@ -1006,6 +1007,7 @@ pub fn Compiler(config: Config) type {
         /// the AST `.nothing` tokens are discarded and won't appear in the
         /// result.
         pub fn discard(parser: Parser) Parser {
+            // TODO discard == optional?
             const shim = struct {
                 fn disardMapper(
                     _: Context,
