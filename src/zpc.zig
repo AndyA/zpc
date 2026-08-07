@@ -966,9 +966,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `parser` succeeds pass the result through `mapper`. It's the
-        /// responsibity of the mapper to free any parts of the result that it
-        /// doesn't return.
+        /// Pass the result of `parser` through `mapper`. It's the responsibity of
+        /// the mapper to free any parts of the result that it doesn't return.
         pub fn map(parser: Parser, mapper: Mapper) Parser {
             const shim = struct {
                 fn mapParser(ctx: Context, input: []const Char) Error!Result {
@@ -978,10 +977,10 @@ pub fn Compiler(config: Config) type {
             return shim.mapParser;
         }
 
-        /// If `parser` succeeds pass the result through `mapper`. The result
-        /// is temporary and will be freed automatically so `mapper` must
-        /// create a new result that doesn't depend on any part of the result
-        /// it's passed.
+        /// Pass the result of `parser` through `mapper`. The result is
+        /// temporary and will be freed automatically so `mapper` must create a
+        /// new result that doesn't depend on any part of the result it's
+        /// passed.
         pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
             const shim = switch (config.phase) {
                 .comp => struct {
