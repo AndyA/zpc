@@ -931,9 +931,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// If `parser` succeeds, discard its result and replace it with a
-        /// `.nothing` token (which won't appear in the AST unless it's at the
-        /// root).
+        /// If `parser` fails replace the failure with a `.nothing` token that will
+        /// be discarded unless it is the root token.
         pub fn optional(parser: Parser) Parser {
             // TODO discard == optional?
             const shim = struct {
