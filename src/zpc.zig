@@ -101,6 +101,10 @@ pub fn TokenType(config: Config) type {
             flat: []const Self, // Like a list but flattens into its parent
         },
 
+        pub fn isSlice(self: Self) bool {
+            return self.value == .slice;
+        }
+
         pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
             try (Formatter{ .token = &self }).format(writer);
         }
@@ -1277,6 +1281,57 @@ pub fn Compiler(config: Config) type {
             );
         }
 
+        /// If `lower_parser` succeeds with a `.slice` token call
+        /// `upper_parser` on the slice. If `upper_parser` succeeds and
+        /// consumes all of the text in the slice return its result otherwise
+        /// return the result from `lower_parser`.
+        pub fn reparse(lower_parser: Parser, upper_parser: Parser) Parser {
+            const shim = struct {
+                fn refineParser(ctx: Context, input: []const Char) Error!Result {
+                    const lres = try lower_parser(ctx, input);
+                    errdefer lres.deinit(ctx);
+
+                    if (!lres.succeeded() or !lres.tok.ok.isSlice())
+                        return lres;
+
+                    var ures = try left(upper_parser, eof())(
+                        ctx,
+                        lres.tok.ok.value.slice,
+                    );
+
+                    if (!ures.succeeded())
+                        return lres;
+
+                    defer lres.deinit(ctx);
+                    ures.rest = lres.rest;
+                    ures.tok.ok.input = lres.tok.ok.input;
+                    return ures;
+                }
+            };
+            return shim.refineParser;
+        }
+
+        test reparse {
+            const parseChar = C.takeUntil(.MULTI, .zeroOrMore, P.equal_('"'));
+            const parseString = C.between(
+                C.literal("\""),
+                parseChar,
+                C.literal("\""),
+            );
+            const parseKeyword =
+                C.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic);
+
+            const parseStringOrIdent = C.reparse(parseString, parseKeyword);
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice("Foo\"", .IDENT, "Foo"), ""),
+                try parseStringOrIdent(ctx, "\"Foo\""),
+            );
+        }
+
         /// Call a parser pointed to by the field `field_name` in the context.
         /// This makes it possible to create recursive parsers.
         pub fn recurse(field_name: []const Char) Parser {
@@ -1409,6 +1464,7 @@ const TestTag = enum(u8) {
     ALPHA,
     MULTI,
     IDENT,
+    STRING,
     PLUS,
     MINUS,
     OPEN,

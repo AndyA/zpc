@@ -18,6 +18,7 @@ const JsonPathTag = enum(u8) {
     NUMBER,
     STRING,
     WILD,
+    ALT, // to be used to build trees of paths
 };
 
 const JsonPathContext = struct {
@@ -30,6 +31,14 @@ const C = zpc.Compiler(JsonPathContext.config);
 fn makeJsonPathParser() C.Parser {
     const intParser = C.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);
 
+    const identFirstPred = C.P.or_(std.ascii.isAlphabetic, C.P.set_("$_"));
+    const identRestPred = C.P.or_(identFirstPred, std.ascii.isDigit);
+
+    const identParser = C.span(.IDENT, C.left(
+        C.takeWhile(.NONE, .one, identFirstPred),
+        C.takeWhile(.NONE, .zeroOrMore, identRestPred),
+    ));
+
     const charParser = C.alt(&.{
         C.left(C.literal("\\"), C.takeUntil(.NONE, .one, std.ascii.isControl)),
         C.takeUntil(.NONE, .oneOrMore, C.P.or_(
@@ -38,11 +47,13 @@ fn makeJsonPathParser() C.Parser {
         )),
     });
 
-    const stringParser = C.between(
+    const stringLiteralParser = C.between(
         C.literal("\""),
         C.span(.STRING, C.many(.NONE, .zeroOrMore, charParser)),
         C.literal("\""),
     );
+
+    const stringParser = C.reparse(stringLiteralParser, identParser);
 
     const wildParser = C.keyword(.WILD, "*");
 
@@ -51,14 +62,6 @@ fn makeJsonPathParser() C.Parser {
         C.alt(&.{ wildParser, stringParser, intParser }),
         C.literal("]"),
     );
-
-    const identFirstPred = C.P.or_(std.ascii.isAlphabetic, C.P.set_("$_"));
-    const identRestPred = C.P.or_(identFirstPred, std.ascii.isDigit);
-
-    const identParser = C.span(.IDENT, C.left(
-        C.takeWhile(.NONE, .one, identFirstPred),
-        C.takeWhile(.NONE, .zeroOrMore, identRestPred),
-    ));
 
     const refParser = C.alt(&.{
         subscriptParser,
@@ -100,6 +103,8 @@ pub fn main(init: std.process.Init) !void {
         \\$..*
         ,
         \\$..[*]
+        ,
+        \\$["foo"]
     };
 
     for (paths) |path| {
