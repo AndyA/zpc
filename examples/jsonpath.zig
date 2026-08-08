@@ -47,7 +47,7 @@ fn makeJsonPathParser() C.Parser {
         )),
     });
 
-    const stringLiteralParser = C.between(
+    const stringParser = C.between(
         C.literal("\""),
         C.span(.STRING, C.many(.NONE, .zeroOrMore, charParser)),
         C.literal("\""),
@@ -55,13 +55,13 @@ fn makeJsonPathParser() C.Parser {
 
     // Any string that's a valid identifier can be replaced with the
     // identifier.
-    const stringParser = C.refineSlice(stringLiteralParser, identParser);
+    const stringIdentParser = C.refineSlice(stringParser, identParser);
 
     const wildParser = C.keyword(.WILD, "*");
 
     const subscriptParser = C.between(
         C.literal("["),
-        C.alt(&.{ wildParser, stringParser, intParser }),
+        C.alt(&.{ wildParser, stringIdentParser, intParser }),
         C.literal("]"),
     );
 
