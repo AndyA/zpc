@@ -94,7 +94,7 @@ pub fn main(init: std.process.Init) !void {
     const ctx: JsonPathContext = .{ .allocator = init.gpa };
 
     const paths: []const []const u8 = &.{
-        \\$[0].$foo["\""].[*]..$.*
+        \\$["name"].$foo["\""].[*]..$.*
         ,
         \\$
         ,
