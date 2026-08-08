@@ -22,13 +22,14 @@ const JsonPathTag = enum(u8) {
 };
 
 const JsonPathContext = struct {
-    const config: zpc.Config = .{ .Tag = JsonPathTag, .Context = @This() };
     allocator: Allocator,
 };
 
-const C = zpc.Compiler(JsonPathContext.config);
-
-fn makeJsonPathParser() C.Parser {
+const jsonPathParser = blk: {
+    const C = zpc.Compiler(.{
+        .Tag = JsonPathTag,
+        .Context = JsonPathContext,
+    });
     const intParser = C.takeWhile(.NUMBER, .oneOrMore, std.ascii.isDigit);
 
     const identFirstPred = C.P.or_(std.ascii.isAlphabetic, C.P.set_("$_"));
@@ -82,15 +83,14 @@ fn makeJsonPathParser() C.Parser {
         C.seq(.SEGMENT, &.{ C.always(.SUBSCRIPT, "."), subscriptParser }),
     });
 
-    return C.between(
+    break :blk C.between(
         C.literal("$"),
         C.many(.PATH, .zeroOrMore, segmentParser),
         C.eof(),
     );
-}
+};
 
 pub fn main(init: std.process.Init) !void {
-    const jsonPathParser = makeJsonPathParser();
     const ctx: JsonPathContext = .{ .allocator = init.gpa };
 
     const paths: []const []const u8 = &.{
