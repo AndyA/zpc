@@ -77,9 +77,9 @@ const jsonPathParser = blk: {
         // ..[sub]  SEGMENT(SEARCH, NUMBER | STRING | WILD)
         C.seq(.SEGMENT, &.{ C.keyword(.SEARCH, ".."), refParser }),
         // .foo     SEGMENT(SUBSCRIPT, IDENT | WILD)
-        // .[sub]   SEGMENT(SUBSCRIPT, NUMBER | STRING | WILD)
+        // .[sub]   SEGMENT(SUBSCRIPT, IDENT | NUMBER | STRING | WILD)
         C.seq(.SEGMENT, &.{ C.keyword(.SUBSCRIPT, "."), refParser }),
-        // [sub]    SEGMENT(SUBSCRIPT, NUMBER | STRING | WILD)
+        // [sub]    SEGMENT(SUBSCRIPT, IDENT | NUMBER | STRING | WILD)
         C.seq(.SEGMENT, &.{ C.always(.SUBSCRIPT, "."), subscriptParser }),
     });
 
