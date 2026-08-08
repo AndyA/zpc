@@ -53,7 +53,9 @@ fn makeJsonPathParser() C.Parser {
         C.literal("\""),
     );
 
-    const stringParser = C.reparse(stringLiteralParser, identParser);
+    // Any string that's a valid identifier can be replaced with the
+    // identifier.
+    const stringParser = C.refineSlice(stringLiteralParser, identParser);
 
     const wildParser = C.keyword(.WILD, "*");
 

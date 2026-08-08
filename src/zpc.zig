@@ -1285,7 +1285,7 @@ pub fn Compiler(config: Config) type {
         /// `upper_parser` on the slice. If `upper_parser` succeeds and
         /// consumes all of the text in the slice return its result otherwise
         /// return the result from `lower_parser`.
-        pub fn reparse(lower_parser: Parser, upper_parser: Parser) Parser {
+        pub fn refineSlice(lower_parser: Parser, upper_parser: Parser) Parser {
             const shim = struct {
                 fn refineParser(ctx: Context, input: []const Char) Error!Result {
                     const lres = try lower_parser(ctx, input);
@@ -1311,7 +1311,7 @@ pub fn Compiler(config: Config) type {
             return shim.refineParser;
         }
 
-        test reparse {
+        test refineSlice {
             const parseChar = C.takeUntil(.MULTI, .zeroOrMore, P.equal_('"'));
             const parseString = C.between(
                 C.literal("\""),
@@ -1321,7 +1321,7 @@ pub fn Compiler(config: Config) type {
             const parseKeyword =
                 C.takeWhile(.IDENT, .oneOrMore, std.ascii.isAlphabetic);
 
-            const parseStringOrIdent = C.reparse(parseString, parseKeyword);
+            const parseStringOrIdent = C.refineSlice(parseString, parseKeyword);
 
             const ctx: TestContext = .{ .allocator = std.testing.allocator };
 
