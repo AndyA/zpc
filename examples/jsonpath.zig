@@ -1,12 +1,12 @@
 const std = @import("std");
-const print = std.debug.print;
-const assert = std.debug.assert;
-const expectEqualDeep = std.testing.expectEqualDeep;
-
-const Io = std.Io;
-const Allocator = std.mem.Allocator;
 
 const zpc = @import("zpc");
+
+const Io = std.Io;
+const assert = std.debug.assert;
+const print = std.debug.print;
+const Allocator = std.mem.Allocator;
+const expectEqualDeep = std.testing.expectEqualDeep;
 
 const JsonPathTag = enum(u8) {
     NONE,

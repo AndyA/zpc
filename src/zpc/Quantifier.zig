@@ -7,9 +7,10 @@
 //!
 
 const std = @import("std");
-const assert = std.debug.assert;
 
 const Self = @This();
+const assert = std.debug.assert;
+
 /// Match zero or more times (*)
 pub const zeroOrMore: Self = .{};
 /// Match zero or one times (?)

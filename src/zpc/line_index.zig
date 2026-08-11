@@ -2,11 +2,12 @@
 //! "\n" | "\r\n" | "\r"
 
 const std = @import("std");
-const print = std.debug.print;
+
 const assert = std.debug.assert;
+const print = std.debug.print;
+const Allocator = std.mem.Allocator;
 const expectEqual = std.testing.expectEqual;
 const expectEqualDeep = std.testing.expectEqualDeep;
-const Allocator = std.mem.Allocator;
 
 /// Count the number of newlines in a text. A newline is defined as LF, CR or CRLF. We
 /// count LFCR as LF, CR because we're not barbarians.

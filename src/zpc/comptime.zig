@@ -1,10 +1,10 @@
 const std = @import("std");
-const print = std.debug.print;
-const assert = std.debug.assert;
-const expectEqualDeep = std.testing.expectEqualDeep;
 
-const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const print = std.debug.print;
 const Alignment = std.mem.Alignment;
+const Allocator = std.mem.Allocator;
+const expectEqualDeep = std.testing.expectEqualDeep;
 
 fn alloc(_: *anyopaque, _: usize, _: Alignment, _: usize) ?[*]u8 {
     unreachable;

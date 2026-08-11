@@ -1,9 +1,9 @@
 const std = @import("std");
-const print = std.debug.print;
-const assert = std.debug.assert;
-const expectEqualDeep = std.testing.expectEqualDeep;
 
 const Io = std.Io;
+const assert = std.debug.assert;
+const print = std.debug.print;
+const expectEqualDeep = std.testing.expectEqualDeep;
 
 fn IntRep(T: type) type {
     return struct {

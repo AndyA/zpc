@@ -1,10 +1,10 @@
 const std = @import("std");
-const print = std.debug.print;
-
-const Io = std.Io;
-const Allocator = std.mem.Allocator;
 
 const zpc = @import("zpc");
+
+const Io = std.Io;
+const print = std.debug.print;
+const Allocator = std.mem.Allocator;
 
 const CsvTag = enum(u8) { NONE, QUOTED, BARE, ROW, CSV };
 const CsvContext = struct {
