@@ -59,7 +59,10 @@ fn makeJsonParser() C.Parser {
             C.left(intParser, C.optional(C.left(C.literal("."), intParser))),
             C.optional(C.left(
                 C.alt(&.{ C.literal("e"), C.literal("E") }),
-                C.left(C.optional(C.alt(&.{ C.literal("+"), C.literal("-") })), intParser),
+                C.left(
+                    C.optional(C.alt(&.{ C.literal("+"), C.literal("-") })),
+                    intParser,
+                ),
             )),
         );
 
@@ -86,8 +89,18 @@ fn makeJsonParser() C.Parser {
         C.right(C.right(skipSpace, C.literal(":")), selfParser),
     });
 
-    const objectParser = makeListParser(.OBJECT, C.literal("{"), kvParser, C.literal("}"));
-    const arrayParser = makeListParser(.ARRAY, C.literal("["), selfParser, C.literal("]"));
+    const objectParser = makeListParser(
+        .OBJECT,
+        C.literal("{"),
+        kvParser,
+        C.literal("}"),
+    );
+    const arrayParser = makeListParser(
+        .ARRAY,
+        C.literal("["),
+        selfParser,
+        C.literal("]"),
+    );
 
     const jsonParser = C.right(skipSpace, C.alt(&.{
         C.keyword(.FALSE, "false"),

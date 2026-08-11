@@ -427,7 +427,7 @@ pub fn Compiler(config: Config) type {
             }
         };
 
-        /// If `str` is the next input succeed with a token tagged with `tag`.
+        /// If the next input is `str` succeed with a token tagged with `tag`.
         pub fn keyword(tag: Tag, str: []const Char) Parser {
             if (str.len == 0)
                 @compileError("Empty keyword not allowed");
@@ -470,7 +470,9 @@ pub fn Compiler(config: Config) type {
         }
 
         /// Succeed with a token tagged with `tag` if the next input is the
-        /// tag name of the tag. Useful with tags like `@"<="`.
+        /// tag name of the tag.
+        ///
+        /// Useful with tags like `@"<="`.
         pub fn tagName(tag: Tag) Parser {
             // Only works with []u8
             if (Char != u8)
@@ -641,6 +643,10 @@ pub fn Compiler(config: Config) type {
 
         /// Try each of `parsers` in turn returning the result of the first
         /// that succeeds. Fail if none succeeds.
+        ///
+        /// In the event of failure the `fail` slice of the result will reflect
+        /// the furthest point reached in the input by any of the parsers. This
+        /// generally reflects the location of a syntax error.
         pub fn alt(parsers: []const *const Parser) Parser {
             if (parsers.len == 0)
                 @compileError("alt needs at least one parser");
@@ -1332,8 +1338,8 @@ pub fn Compiler(config: Config) type {
             );
         }
 
-        /// Call a parser pointed to by the field `field_name` in the context.
-        /// This makes it possible to create recursive parsers.
+        /// Call a parser pointed to by the field `field_name` in the context and
+        /// return its result. This makes it possible to create recursive parsers.
         pub fn recurse(field_name: []const Char) Parser {
             if (!@hasField(Context, field_name))
                 @compileError("Context has no field called " ++ field_name);
