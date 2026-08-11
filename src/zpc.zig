@@ -427,7 +427,7 @@ pub fn Compiler(config: Config) type {
             }
         };
 
-        /// If `str` is thre next input succeed with a token tagged with `tag`.
+        /// If `str` is the next input succeed with a token tagged with `tag`.
         pub fn keyword(tag: Tag, str: []const Char) Parser {
             if (str.len == 0)
                 @compileError("Empty keyword not allowed");
