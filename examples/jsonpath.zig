@@ -73,8 +73,8 @@ const jsonPathParser = blk: {
     });
 
     const segmentParser = C.alt(&.{
-        // ..foo    SEGMENT(SEARCH, IDENT | WILD)
-        // ..[sub]  SEGMENT(SEARCH, IDENT | NUMBER | STRING | WILD)
+        // ..foo    SEGMENT(SEARCH,    IDENT | WILD)
+        // ..[sub]  SEGMENT(SEARCH,    IDENT | NUMBER | STRING | WILD)
         C.seq(.SEGMENT, &.{ C.keyword(.SEARCH, ".."), refParser }),
         // .foo     SEGMENT(SUBSCRIPT, IDENT | WILD)
         // .[sub]   SEGMENT(SUBSCRIPT, IDENT | NUMBER | STRING | WILD)
