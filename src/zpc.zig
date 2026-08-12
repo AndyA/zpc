@@ -1072,7 +1072,7 @@ pub fn Composer(config: Config) type {
         }
 
         test span {
-            const parseAlphaNum = C.span(.ALNUM, C.seq(.MULTI, &.{
+            const parseNumAlpha = C.span(.ALNUM, C.seq(.MULTI, &.{
                 C.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
                 C.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
             }));
@@ -1080,7 +1080,7 @@ pub fn Composer(config: Config) type {
             try checkAndConsume(
                 ctx,
                 .initOk(.initSlice("100abc.", .ALNUM, "100abc"), "."),
-                try parseAlphaNum(ctx, "100abc."),
+                try parseNumAlpha(ctx, "100abc."),
             );
         }
 
