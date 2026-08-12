@@ -40,8 +40,8 @@ pub fn TokenType(config: Config) type {
             .run => std.ArrayList(Self),
         };
 
-        /// The zeroeth tag in `Tag` is reserved for use when we don't
-        /// care how a token is tagged.
+        /// The zeroeth tag in `Tag` is reserved for use when we don't care how
+        /// a token is tagged.
         pub const NOP: config.Tag = @fromBackingInt(0);
 
         const Formatter = struct {
@@ -110,8 +110,8 @@ pub fn TokenType(config: Config) type {
             try (Formatter{ .token = &self }).format(writer);
         }
 
-        /// Return a formatter that will pretty-print the token.
-        /// Usage: `print("{f}\n", .{tok.pretty()});`
+        /// Return a formatter that will pretty-print the token. Usage:
+        /// `print("{f}\n", .{tok.pretty()});`
         pub fn pretty(self: *const Self) Formatter {
             return .{ .token = self, .pretty = true };
         }
@@ -289,8 +289,8 @@ pub fn ResultType(config: Config) type {
             try (Formatter{ .token = &self, .pretty = false }).format(writer);
         }
 
-        /// Return a formatter that will pretty-print the result.
-        /// Usage: `print("{f}\n", .{res.pretty()});`
+        /// Return a formatter that will pretty-print the result. Usage:
+        /// `print("{f}\n", .{res.pretty()});`
         pub fn pretty(self: *const Self) Formatter {
             return .{ .token = self, .pretty = true };
         }
@@ -471,7 +471,7 @@ pub fn Composer(config: Config) type {
         }
 
         /// Succeed with a token tagged with `tag` if the next input is the
-        /// tag name of the tag.
+        /// @tagName of the tag.
         ///
         /// Useful with tags like `@"<="`.
         pub fn tagName(tag: Tag) Parser {
