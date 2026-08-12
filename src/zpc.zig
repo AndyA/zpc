@@ -346,7 +346,7 @@ pub fn PredicateType(config: Config) type {
 }
 
 /// Create a parser compiler.
-pub fn Compiler(config: Config) type {
+pub fn Composer(config: Config) type {
     const Char = config.Char;
     const Tag = config.Tag;
     const Context = config.Context;
@@ -1441,7 +1441,7 @@ pub fn Compiler(config: Config) type {
                 };
             };
 
-            const CP = Compiler(ComptimeContext.cfg);
+            const CP = Composer(ComptimeContext.cfg);
             const parseAlphaNum = CP.seq(.MULTI, &.{
                 CP.takeWhile(.DIGIT, .oneOrMore, std.ascii.isDigit),
                 CP.takeWhile(.ALPHA, .oneOrMore, std.ascii.isAlphabetic),
@@ -1495,7 +1495,7 @@ const TestContext = struct {
 };
 
 const TestResult = ResultType(TestContext.config);
-const C = Compiler(TestContext.config);
+const C = Composer(TestContext.config);
 
 fn checkAndConsume(
     ctx: TestContext,
@@ -1507,6 +1507,6 @@ fn checkAndConsume(
 }
 
 test {
-    _ = Compiler(TestContext.config);
+    _ = Composer(TestContext.config);
     _ = @import("zpc/line_index.zig");
 }

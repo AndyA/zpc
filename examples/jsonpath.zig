@@ -26,7 +26,7 @@ const JsonPathContext = struct {
 };
 
 const jsonPathParser = blk: {
-    const C = zpc.Compiler(.{
+    const C = zpc.Composer(.{
         .Tag = JsonPathTag,
         .Context = JsonPathContext,
     });

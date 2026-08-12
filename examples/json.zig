@@ -28,7 +28,7 @@ const JsonContext = struct {
     jsonParser: *const zpc.ParserType(config),
 };
 
-const C = zpc.Compiler(JsonContext.config);
+const C = zpc.Composer(JsonContext.config);
 
 const skipSpace = C.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
 

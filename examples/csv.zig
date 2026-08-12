@@ -12,7 +12,7 @@ const CsvContext = struct {
     allocator: Allocator,
 };
 
-const C = zpc.Compiler(CsvContext.config);
+const C = zpc.Composer(CsvContext.config);
 
 fn makeCsvParser() C.Parser {
     // Skip horizontal whitespace
