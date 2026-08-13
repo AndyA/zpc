@@ -5,6 +5,7 @@ const examples: []const []const u8 = &.{
     "comptime",
     "csv",
     "eval",
+    "indented",
     "json",
     "jsonpath",
     "mule",
