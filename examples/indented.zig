@@ -116,6 +116,7 @@ pub fn main(init: std.process.Init) !void {
     const ctx: IndentContext = .{ .allocator = init.gpa };
 
     const codes: []const []const u8 = &.{
+        "",
         \\A
         ,
         \\A
