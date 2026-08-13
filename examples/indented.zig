@@ -8,7 +8,7 @@ const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const expectEqualDeep = std.testing.expectEqualDeep;
 
-const IndentTag = enum(u8) { NONE, IN, SAME, OUT, BLOCK, LINE, PROG };
+const IndentTag = enum(u8) { NONE, IN, SAME, OUT, BLOCK, LINE };
 
 const IndentContext = struct {
     const Self = @This();
@@ -30,7 +30,6 @@ const C = zpc.Composer(IndentContext.config);
 
 const skipSpace = C.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
 const skipHorizontalSpace = C.takeWhile(.NONE, .zeroOrMore, C.P.set_(" \t"));
-const parseLine = C.takeUntil(.LINE, .oneOrMore, C.P.set_("\r\n"));
 
 const parseNewline = C.alt(&.{
     C.literal("\n\r"),
@@ -39,7 +38,10 @@ const parseNewline = C.alt(&.{
     C.literal("\r"),
 });
 
-const parseLineAndNewline = C.left(parseLine, C.optional(parseNewline));
+const parseLine = C.left(
+    C.takeUntil(.LINE, .oneOrMore, C.P.set_("\r\n")),
+    C.optional(parseNewline),
+);
 
 fn parseIndent(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
     const lws = try skipHorizontalSpace(ctx, input);
@@ -75,7 +77,7 @@ fn parseCode(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
             var tail = indent.rest;
 
             {
-                const res = try parseLineAndNewline(nest, tail);
+                const res = try parseLine(nest, tail);
                 if (!res.succeeded()) {
                     C.Token.deinitArrayList(&list, nest);
                     return res;
@@ -100,13 +102,13 @@ fn parseCode(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
                 tail,
             );
         },
-        .SAME => return try parseLineAndNewline(ctx, indent.rest),
+        .SAME => return try parseLine(ctx, indent.rest),
         .OUT, .NONE => return indent,
         else => unreachable,
     }
 }
 
-const parseProgram = C.many(.PROG, .zeroOrMore, parseCode);
+const parseProgram = C.lower(C.many(.BLOCK, .zeroOrMore, parseCode));
 
 pub fn main(init: std.process.Init) !void {
     const ctx: IndentContext = .{ .allocator = init.gpa };
@@ -115,6 +117,10 @@ pub fn main(init: std.process.Init) !void {
         \\A
         \\B
         \\C
+        ,
+        \\ A
+        \\ B
+        \\ C
         ,
         \\A
         \\ B
