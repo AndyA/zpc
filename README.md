@@ -19,4 +19,5 @@
 - ~~`reparse` suggests also `rest` - which gets all the remaining input; would allow e.g. switching grammar at the top level.~~ `rest()`
 - ~~make sure we can parse at comptime~~
 - ~~how to parse e.g. YAML, Python?~~ `examples/indented.zig`
+- AST as JSON
 - parsing non-text binaries?
