@@ -70,8 +70,8 @@ fn parseCode(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
             const nest = ctx.withIndent(indent.tok.ok.value.slice);
             var list: C.Token.ArrayList = .empty;
             errdefer C.Token.deinitArrayList(&list, nest);
-
             var tail = indent.rest;
+
             {
                 const res = try parseLineAndNewline(nest, tail);
                 if (!res.succeeded()) {
