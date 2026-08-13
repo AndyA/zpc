@@ -4,7 +4,8 @@
 
 # Negatives
 
-- not as fast as SIMD
+- not as fast as hand rolled(?)
+- definitely not as fast as SIMD
 - no streaming - slice input
 - stops at first error
 - tokens can't contain e.g. parsed numbers

@@ -18,6 +18,8 @@ const IndentContext = struct {
     indent: []const u8 = "",
 
     pub fn withIndent(self: Self, indent: []const u8) Self {
+        assert(indent.len > self.indent.len);
+        assert(std.mem.startsWith(u8, indent, self.indent));
         var nest = self;
         nest.indent = indent;
         return nest;
@@ -51,14 +53,14 @@ fn parseIndent(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
 
     const indent = lws.tok.ok.value.slice;
 
-    if (indent.len == ctx.indent.len and std.mem.eql(u8, indent, ctx.indent))
-        return .initOk(.initSlice(input, .SAME, indent), input[indent.len..])
+    return if (indent.len == ctx.indent.len and std.mem.eql(u8, indent, ctx.indent))
+        .initOk(.initSlice(input, .SAME, indent), input[indent.len..])
     else if (indent.len > ctx.indent.len and std.mem.startsWith(u8, indent, ctx.indent))
-        return .initOk(.initSlice(input, .IN, indent), input[indent.len..])
+        .initOk(.initSlice(input, .IN, indent), input[indent.len..])
     else if (std.mem.startsWith(u8, ctx.indent, indent))
-        return .initOk(.initSlice(input, .OUT, indent), input[indent.len..])
+        .initOk(.initSlice(input, .OUT, indent), input[indent.len..])
     else
-        return .initFailHere(input);
+        .initFailHere(input);
 }
 
 fn parseCode(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
@@ -88,11 +90,8 @@ fn parseCode(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
                     C.Token.deinitArrayList(&list, nest);
                     return res;
                 }
-                switch (res.tok.ok.tag) {
-                    .NONE => {},
-                    .OUT => break :lines,
-                    else => try res.tok.ok.appendToArrayList(nest, &list),
-                }
+                if (res.tok.ok.tag == .OUT) break :lines;
+                try res.tok.ok.appendToArrayList(nest, &list);
                 tail = res.rest;
             }
 
@@ -116,6 +115,10 @@ pub fn main(init: std.process.Init) !void {
         \\A
         \\B
         \\C
+        ,
+        \\A
+        \\ B
+        \\  C
         ,
         \\A
         \\
