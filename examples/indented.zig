@@ -37,7 +37,7 @@ const parseNewline = C.alt(&.{
     C.literal("\r"),
 });
 
-const parseLineAndNewline = C.left(parseLine, parseNewline);
+const parseLineAndNewline = C.left(parseLine, C.optional(parseNewline));
 
 fn parseIndent(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
     const lws = try skipHorizontalSpace(ctx, input);
@@ -116,7 +116,6 @@ pub fn main(init: std.process.Init) !void {
         \\A
         \\B
         \\C
-        \\
         ,
         \\A
         \\
