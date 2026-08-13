@@ -91,7 +91,10 @@ fn parseCode(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
                     C.Token.deinitArrayList(&list, nest);
                     return res;
                 }
-                if (res.tok.ok.tag == .OUT) break :lines;
+
+                if (res.tok.ok.tag == .OUT)
+                    break :lines;
+
                 try res.tok.ok.appendToArrayList(nest, &list);
                 tail = res.rest;
             }
