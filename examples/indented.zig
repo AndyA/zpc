@@ -12,7 +12,6 @@ const IndentTag = enum(u8) { NONE, IN, SAME, OUT, BLOCK, LINE };
 
 const IndentContext = struct {
     const Self = @This();
-    const config: zpc.Config = .{ .Tag = IndentTag, .Context = Self };
 
     allocator: Allocator,
     indent: []const u8 = "",
@@ -26,12 +25,12 @@ const IndentContext = struct {
     }
 };
 
-const C = zpc.Composer(IndentContext.config);
+const C = zpc.Composer(.{ .Tag = IndentTag, .Context = IndentContext });
 
 const skipSpace = C.takeWhile(.NONE, .zeroOrMore, std.ascii.isWhitespace);
 const skipHorizontalSpace = C.takeWhile(.NONE, .zeroOrMore, C.P.set_(" \t"));
 
-const parseNewline = C.alt(&.{
+const skipNewline = C.alt(&.{
     C.literal("\n\r"),
     C.literal("\n"),
     C.literal("\r\n"),
@@ -40,14 +39,14 @@ const parseNewline = C.alt(&.{
 
 const parseLine = C.left(
     C.takeUntil(.LINE, .oneOrMore, C.P.set_("\r\n")),
-    C.optional(parseNewline),
+    C.optional(skipNewline),
 );
 
 fn parseIndent(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
     const lws = try skipHorizontalSpace(ctx, input);
-    if (!lws.succeeded()) return lws;
+    assert(lws.succeeded());
 
-    const newline = try parseNewline(ctx, lws.rest);
+    const newline = try skipNewline(ctx, lws.rest);
 
     // Empty line of whitespace?
     if (newline.succeeded())
@@ -57,7 +56,7 @@ fn parseIndent(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
 
     return if (indent.len == ctx.indent.len and std.mem.eql(u8, indent, ctx.indent))
         .initOk(.initSlice(input, .SAME, indent), input[indent.len..])
-    else if (indent.len > ctx.indent.len and std.mem.startsWith(u8, indent, ctx.indent))
+    else if (std.mem.startsWith(u8, indent, ctx.indent))
         .initOk(.initSlice(input, .IN, indent), input[indent.len..])
     else if (std.mem.startsWith(u8, ctx.indent, indent))
         .initOk(.initSlice(input, .OUT, indent), input[indent.len..])
@@ -108,12 +107,17 @@ fn parseCode(ctx: IndentContext, input: []const u8) zpc.Error!C.Result {
     }
 }
 
-const parseProgram = C.lower(C.many(.BLOCK, .zeroOrMore, parseCode));
+const parseProgram = C.left(
+    C.lower(C.many(.BLOCK, .zeroOrMore, parseCode)),
+    C.eof(),
+);
 
 pub fn main(init: std.process.Init) !void {
     const ctx: IndentContext = .{ .allocator = init.gpa };
 
     const codes: []const []const u8 = &.{
+        \\A
+        ,
         \\A
         \\B
         \\C
@@ -134,6 +138,20 @@ pub fn main(init: std.process.Init) !void {
         \\    E
         \\F
         \\
+        ,
+        \\A
+        \\ B
+        \\  C
+        \\   D
+        \\  E
+        \\ F
+        \\G
+        ,
+        \\def fib(x):
+        \\    # combinatorial fib
+        \\    if (x < 2):
+        \\        return 1
+        \\    return fib(x - 1) + fib(x - 2)
     };
 
     for (codes) |code| {
