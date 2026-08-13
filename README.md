@@ -17,6 +17,5 @@
 - ~~or `reparse(lower: Parser, upper: Parser)` - parse, span, reparse~~ `refine()`
 - ~~`reparse` suggests also `rest` - which gets all the remaining input; would allow e.g. switching grammar at the top level.~~ `rest()`
 - ~~make sure we can parse at comptime~~
-- how to parse e.g. YAML, Python?
-  - custom context + parsers to track current indent?
+- ~~how to parse e.g. YAML, Python?~~ `examples/indented.zig`
 - parsing non-text binaries?
