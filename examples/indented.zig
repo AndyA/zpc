@@ -147,8 +147,8 @@ pub fn main(init: std.process.Init) !void {
         \\ F
         \\G
         ,
+        \\# combinatorial fib
         \\def fib(x):
-        \\    # combinatorial fib
         \\
         \\    if (x < 2):
         \\        return 1
