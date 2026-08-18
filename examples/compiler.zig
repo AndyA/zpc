@@ -28,7 +28,10 @@ pub fn KnownRange(T: type) type {
 
     return struct {
         const Self = @This();
-        pub const empty: Self = .{ .min = std.math.minInt(T), .max = std.math.maxInt(T) };
+        pub const empty: Self = .{
+            .min = std.math.minInt(T),
+            .max = std.math.maxInt(T),
+        };
 
         min: T,
         max: T,
@@ -245,8 +248,11 @@ pub fn KnownBits(T: type) type {
                 return simpleRange(self.set, self.clear);
 
             // print("sign={d}\n", .{self.sign});
-            const sign_mask = ~(if (self.sign + 1 == R.Bits) 0 else @as(R.U, std.math.maxInt(R.U)) >>
-                @as(R.Shift, @intCast(self.sign + 1)));
+            const sign_mask = ~(if (self.sign + 1 == R.Bits)
+                0
+            else
+                @as(R.U, std.math.maxInt(R.U)) >>
+                    @as(R.Shift, @intCast(self.sign + 1)));
             const pos_range = simpleRange(self.set, self.clear | sign_mask);
             const neg_range = simpleRange(self.set | sign_mask, self.clear);
             return .init(neg_range.min, pos_range.max);
