@@ -31,10 +31,6 @@ pub fn exactly(n: usize) Self {
     return range(n, n);
 }
 
-pub fn bounded(self: Self) bool {
-    return self.max != std.math.maxInt(usize);
-}
-
 /// The minimum number of times to match
 min: usize = 0,
 /// The maximum number of times to match
