@@ -286,7 +286,7 @@ pub fn ResultType(config: Config) type {
         rest: []const Char,
 
         pub fn format(self: Self, writer: *Io.Writer) Io.Writer.Error!void {
-            try (Formatter{ .token = &self, .pretty = false }).format(writer);
+            try (Formatter{ .token = &self }).format(writer);
         }
 
         /// Return a formatter that will pretty-print the result. Usage:
