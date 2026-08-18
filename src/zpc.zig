@@ -581,8 +581,7 @@ pub fn Composer(config: Config) type {
         /// number of matched chars falls outside the bounds of `quantifier`.
         /// The matched chars are returned as a `.slice` token.
         pub fn takeWhile(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
-            if (quantifier.min > quantifier.max)
-                @compileError("Bad quantifier");
+            assert(quantifier.min <= quantifier.max);
             const shim = struct {
                 fn takeWhileParser(_: Context, input: []const Char) Error!Result {
                     const len = @min(input.len, quantifier.max);
@@ -879,8 +878,7 @@ pub fn Composer(config: Config) type {
         /// Apply `parser` until it fails or reaches `quantifier.max` matches
         /// and collect the results as a `.list` token.
         pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
-            if (quantifier.min > quantifier.max)
-                @compileError("Bad quantifier");
+            assert(quantifier.min <= quantifier.max);
             const shim = struct {
                 fn manyParser(ctx: Context, input: []const Char) Error!Result {
                     var list: Token.ArrayList = .empty;
