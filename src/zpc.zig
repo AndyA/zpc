@@ -881,13 +881,16 @@ pub fn Composer(config: Config) type {
         pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
             if (quantifier.min > quantifier.max)
                 @compileError("Bad quantifier");
+            // If there's no upper bound the parser has to advance otherwise we'd
+            // be here forever.
+            const parse_next = if (quantifier.bounded()) parser else advances(parser);
             const shim = struct {
                 fn manyParser(ctx: Context, input: []const Char) Error!Result {
                     var list: Token.ArrayList = .empty;
                     errdefer Token.deinitArrayList(&list, ctx);
                     var tail = input;
                     while (list.items.len < quantifier.max) {
-                        const res = try advances(parser)(ctx, tail);
+                        const res = try parse_next(ctx, tail);
                         if (!res.succeeded()) {
                             if (list.items.len >= quantifier.min)
                                 break;
