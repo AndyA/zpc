@@ -20,7 +20,7 @@ fn free(_: *anyopaque, _: []u8, _: Alignment, _: usize) void {
 }
 
 pub const non_allocator: Allocator = .{
-    .ptr = @ptrFromInt(0xdeadbeef),
+    .ptr = undefined,
     .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free },
 };
 
