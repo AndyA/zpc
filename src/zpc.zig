@@ -877,6 +877,8 @@ pub fn Composer(config: Config) type {
 
         /// Apply `parser` until it fails or reaches `quantifier.max` matches
         /// and collect the results as a `.list` token.
+        ///
+        /// Fails if there are fewert than `quantifier.min` matches.
         pub fn many(tag: Tag, quantifier: Quantifier, parser: Parser) Parser {
             assert(quantifier.min <= quantifier.max);
             const shim = struct {
