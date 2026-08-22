@@ -942,8 +942,8 @@ pub fn Composer(config: Config) type {
             );
         }
 
-        /// If `parser` fails replace the failure with a `.nothing` token that will
-        /// be discarded unless it is the root token.
+        /// If `parser` fails replace the failure with a `.nothing` token that
+        /// will be discarded unless it is the root token.
         pub fn optional(parser: Parser) Parser {
             // TODO discard == optional?
             const shim = struct {
@@ -977,8 +977,9 @@ pub fn Composer(config: Config) type {
             );
         }
 
-        /// Pass the result of `parser` through `mapper`. It's the responsibity of
-        /// the mapper to free any parts of the result that it doesn't return.
+        /// Pass the result of `parser` through `mapper`. It's the responsibity
+        /// of the mapper to free any parts of the result that it doesn't
+        /// return.
         pub fn map(parser: Parser, mapper: Mapper) Parser {
             const shim = struct {
                 fn mapParser(ctx: Context, input: []const Char) Error!Result {
