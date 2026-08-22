@@ -1018,7 +1018,6 @@ pub fn Composer(config: Config) type {
         /// the AST `.nothing` tokens are discarded and won't appear in the
         /// result.
         pub fn discard(parser: Parser) Parser {
-            // TODO discard == optional?
             const shim = struct {
                 fn disardMapper(
                     _: Context,
