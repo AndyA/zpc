@@ -990,8 +990,8 @@ pub fn Composer(config: Config) type {
 
         /// Pass the result of `parser` through `mapper`. The result
         /// is temporary and will be freed automatically so `mapper` must
-        /// create a new result that doesn't depend on any part of the result
-        /// it's passed.
+        /// create a new result that doesn't depend on any allocated part of
+        /// the result it's passed.
         pub fn mapTemp(parser: Parser, mapper: Mapper) Parser {
             const shim = switch (config.phase) {
                 .comp => struct {
