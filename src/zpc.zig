@@ -1021,10 +1021,10 @@ pub fn Composer(config: Config) type {
             const shim = struct {
                 fn disardMapper(
                     _: Context,
-                    input: []const Char,
+                    _: []const Char,
                     res: Result,
                 ) Error!Result {
-                    if (!res.succeeded()) return .initFail(res.tok.fail, input);
+                    if (!res.succeeded()) return res;
                     return .initOk(.initNothing(res.tok.ok.input), res.rest);
                 }
             };
