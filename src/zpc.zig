@@ -660,8 +660,7 @@ pub fn Composer(config: Config) type {
                     var hwm = input;
                     inline for (parsers) |parser| {
                         const res = try parser(ctx, input);
-                        if (res.succeeded())
-                            return res;
+                        if (res.succeeded()) return res;
                         hwm = furthest(hwm, res.tok.fail);
                     }
 
@@ -1059,7 +1058,7 @@ pub fn Composer(config: Config) type {
                     input: []const Char,
                     res: Result,
                 ) Error!Result {
-                    if (!res.succeeded()) return .initFail(res.tok.fail, input);
+                    if (!res.succeeded()) return res;
                     const consumed: usize = input.len - res.rest.len;
                     return .initOk(
                         .initSlice(input, tag, input[0..consumed]),
@@ -1179,16 +1178,15 @@ pub fn Composer(config: Config) type {
             const shim = struct {
                 fn lowerParser(ctx: Context, input: []const Char) Error!Result {
                     const res = try parser(ctx, input);
-                    if (res.succeeded()) {
-                        switch (res.tok.ok.value) {
-                            .nothing, .slice => {},
-                            .flat, .list => |list| {
-                                if (list.len == 1) {
-                                    defer res.deinitShallow(ctx);
-                                    return .initOk(list[0], res.rest);
-                                }
-                            },
-                        }
+                    if (!res.succeeded()) return res;
+                    switch (res.tok.ok.value) {
+                        .nothing, .slice => {},
+                        .flat, .list => |list| {
+                            if (list.len == 1) {
+                                defer res.deinitShallow(ctx);
+                                return .initOk(list[0], res.rest);
+                            }
+                        },
                     }
                     return res;
                 }
@@ -1238,8 +1236,7 @@ pub fn Composer(config: Config) type {
                     const lres = try lower_parser(ctx, input);
                     errdefer lres.deinit(ctx);
 
-                    if (!lres.succeeded())
-                        return lres;
+                    if (!lres.succeeded()) return lres;
 
                     const consumed: usize = input.len - lres.rest.len;
                     var ures = try left(upper_parser, eof())(
@@ -1247,8 +1244,7 @@ pub fn Composer(config: Config) type {
                         input[0..consumed],
                     );
 
-                    if (!ures.succeeded())
-                        return lres;
+                    if (!ures.succeeded()) return lres;
 
                     defer lres.deinit(ctx);
                     ures.rest = lres.rest;
