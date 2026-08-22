@@ -49,7 +49,10 @@ pub fn ComptimeArrayList(comptime T: type) type {
             self.items = self.items ++ items;
         }
 
-        pub fn toOwnedSlice(comptime self: *Self, comptime _: Allocator) error{OutOfMemory}![]const T {
+        pub fn toOwnedSlice(
+            comptime self: *Self,
+            comptime _: Allocator,
+        ) error{OutOfMemory}![]const T {
             return self.items;
         }
     };
