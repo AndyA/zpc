@@ -641,6 +641,18 @@ pub fn Composer(config: Config) type {
             return takeWhile(tag, quantifier, P.not_(pred));
         }
 
+        test takeUntil {
+            const parseToDot = C.takeUntil(.FOO, .range(1, 2), P.equal_('.'));
+
+            const ctx: TestContext = .{ .allocator = std.testing.allocator };
+
+            try checkAndConsume(
+                ctx,
+                .initOk(.initSlice("ab.", .FOO, "ab"), "."),
+                try parseToDot(ctx, "ab."),
+            );
+        }
+
         /// Try each of `parsers` in turn returning the result of the first
         /// that succeeds. Fail if none succeeds.
         ///
