@@ -638,7 +638,26 @@ pub fn Composer(config: Config) type {
         /// number of matched chars falls outside the bounds of `quantifier`.
         /// The matched chars are returned as a `.slice` token.
         pub fn takeUntil(tag: Tag, quantifier: Quantifier, pred: Predicate) Parser {
-            return takeWhile(tag, quantifier, P.not_(pred));
+            assert(quantifier.min <= quantifier.max);
+            const shim = struct {
+                fn takeUntilParser(_: Context, input: []const Char) Error!Result {
+                    // Limit len to leave at least one input character to
+                    // satisfy the predicate at the end
+                    const len = @min(input.len - 1, quantifier.max);
+                    if (len < quantifier.min)
+                        return .initFail("", input);
+                    var pos: usize = 0;
+                    while (pos < len and !pred(input[pos]))
+                        pos += 1;
+                    if (pos < quantifier.min or !pred(input[pos]))
+                        return .initFail(input[pos..], input);
+                    return .initOk(
+                        .initSlice(input, tag, input[0..pos]),
+                        input[pos..],
+                    );
+                }
+            };
+            return shim.takeUntilParser;
         }
 
         test takeUntil {
@@ -650,6 +669,12 @@ pub fn Composer(config: Config) type {
                 ctx,
                 .initOk(.initSlice("ab.", .FOO, "ab"), "."),
                 try parseToDot(ctx, "ab."),
+            );
+
+            try checkAndConsume(
+                ctx,
+                .initFail("yz.", "wxyz."),
+                try parseToDot(ctx, "wxyz."),
             );
         }
 
