@@ -1374,7 +1374,7 @@ pub fn Composer(config: Config) type {
 
         /// Call a parser pointed to by the field `field_name` in the context and
         /// return its result. This makes it possible to create recursive parsers.
-        pub fn recurse(field_name: []const Char) Parser {
+        pub fn recurse(field_name: []const u8) Parser {
             if (!@hasField(Context, field_name))
                 @compileError("Context has no field called " ++ field_name);
             const shim = struct {
