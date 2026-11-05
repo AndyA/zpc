@@ -27,7 +27,7 @@ pub fn countNewlines(T: type, text: []const T) u32 {
             const chars: V = text[pos..][0..vlen].*;
             const cr_set = std.simd.shiftElementsRight(chars == cr_splat, 1, false);
             const lf_set = chars == lf_splat;
-            const all_set = lf_set & drop_last | cr_set & (~lf_set | drop_last);
+            const all_set = ((lf_set & drop_last) | cr_set) & (~lf_set | drop_last);
             lines += std.simd.countTrues(all_set);
         }
     }
