@@ -68,7 +68,6 @@ pub fn TokenType(config: Config) type {
                 );
 
                 switch (self.token.value) {
-                    .nothing => {},
                     .slice => |slice| try writer.print(" \"{s}\"", .{slice}),
                     .list, .flat => |list| {
                         try writer.print("(", .{});
@@ -96,7 +95,6 @@ pub fn TokenType(config: Config) type {
         tag: Tag = NOP,
         input: []const Char,
         value: union(enum) {
-            nothing: void,
             slice: []const Char,
             list: []const Self,
             flat: []const Self, // Like a list but flattens into its parent
@@ -134,7 +132,7 @@ pub fn TokenType(config: Config) type {
             return .{
                 .tag = NOP,
                 .input = input,
-                .value = .nothing,
+                .value = .{ .flat = &.{} },
             };
         }
 
@@ -170,7 +168,6 @@ pub fn TokenType(config: Config) type {
             array: *ArrayList,
         ) Error!void {
             switch (self.value) {
-                .nothing => {},
                 .slice, .list => try array.append(getAlloc(ctx), self),
                 .flat => |flat| {
                     defer self.deinitShallow(ctx);
@@ -182,14 +179,14 @@ pub fn TokenType(config: Config) type {
         pub fn deinit(self: Self, ctx: Context) void {
             switch (self.value) {
                 .list, .flat => |list| deinitList(list, ctx),
-                .nothing, .slice => {},
+                .slice => {},
             }
         }
 
         pub fn deinitShallow(self: Self, ctx: Context) void {
             switch (self.value) {
                 .list, .flat => |list| freeList(ctx, list),
-                .nothing, .slice => {},
+                .slice => {},
             }
         }
 
@@ -520,7 +517,7 @@ pub fn Composer(config: Config) type {
             );
         }
 
-        /// Match only at the end of input. Matches with a `.nothing` (which
+        /// Match only at the end of input. Matches with an empty flat slice (which
         /// disappears if not at the root of the AST).
         pub fn eof() Parser {
             const shim = struct {
@@ -978,7 +975,7 @@ pub fn Composer(config: Config) type {
             );
         }
 
-        /// If `parser` fails replace the failure with a `.nothing` token that
+        /// If `parser` fails replace the failure with an empty flat slice that
         /// will be discarded unless it is the root token.
         pub fn optional(parser: Parser) Parser {
             // TODO discard == optional?
@@ -1049,10 +1046,8 @@ pub fn Composer(config: Config) type {
             return shim.mapParser;
         }
 
-        /// If `parser` succeeds, discard its result and return a `.nothing`
-        /// token in its place. At any level of nesting other than the root of
-        /// the AST `.nothing` tokens are discarded and won't appear in the
-        /// result.
+        /// If `parser` succeeds, discard its result and return an empty flat slice
+        /// token in its place.
         pub fn discard(parser: Parser) Parser {
             const shim = struct {
                 fn disardMapper(
@@ -1217,7 +1212,7 @@ pub fn Composer(config: Config) type {
                     const res = try parser(ctx, input);
                     if (!res.succeeded()) return res;
                     switch (res.tok.ok.value) {
-                        .nothing, .slice => {},
+                        .slice => {},
                         .flat, .list => |list| {
                             if (list.len == 1) {
                                 defer res.deinitShallow(ctx);
