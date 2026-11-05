@@ -169,7 +169,7 @@ pub fn KnownBits(T: type) type {
             // not know the value of the bit to the immediate right of the sign
             // extension bits. If we know that bit is 0 or 1 then we know the
             // sign of the value and don't need sign extension.
-            assert(sign_mask >> 1 & (self.set | self.clear) == 0);
+            assert((sign_mask >> 1) & (self.set | self.clear) == 0);
         }
 
         pub fn isExact(self: Self) bool {
@@ -236,8 +236,8 @@ pub fn KnownBits(T: type) type {
                 const mask = @as(R.U, std.math.maxInt(R.U)) <<
                     @as(R.Shift, @intCast(known_lsbs));
                 const fill = set & ~mask;
-                const min = R.fromUnsigned(R.toUnsigned(left.min) & mask | fill);
-                const max = R.fromUnsigned(R.toUnsigned(left.max) & mask | fill);
+                const min = R.fromUnsigned((R.toUnsigned(left.min) & mask) | fill);
+                const max = R.fromUnsigned((R.toUnsigned(left.max) & mask) | fill);
                 break :blk .init(min, max);
             };
         }
